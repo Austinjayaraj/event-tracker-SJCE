@@ -95,7 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const eventData = insertEventSchema.parse(req.body);
       const event = await storage.createEvent({
         ...eventData,
-        createdBy: req.user.id
+        createdBy: req.user!.id
       });
       res.status(201).json(event);
     } catch (error) {
@@ -148,7 +148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const registrationData = insertRegistrationSchema.parse(req.body);
       
       // Check if already registered
-      const existingRegistrations = await storage.getUserRegistrations(req.user.id);
+      const existingRegistrations = await storage.getUserRegistrations(req.user!.id);
       const alreadyRegistered = existingRegistrations.find(r => r.eventId === registrationData.eventId);
       
       if (alreadyRegistered) {
@@ -157,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Generate QR code
       const qrData = {
-        userId: req.user.id,
+        userId: req.user!.id,
         eventId: registrationData.eventId,
         timestamp: Date.now(),
         token: randomBytes(16).toString('hex')
@@ -167,7 +167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const registration = await storage.createRegistration({
         ...registrationData,
-        userId: req.user.id,
+        userId: req.user!.id,
         qrCode: qrCode
       });
       
@@ -183,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/registrations", requireAuth, async (req, res) => {
     try {
-      const registrations = await storage.getUserRegistrations(req.user.id);
+      const registrations = await storage.getUserRegistrations(req.user!.id);
       res.json(registrations);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch registrations" });
@@ -241,7 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: qrData.userId,
         eventId: eventId,
         registrationId: registration.id,
-        scannedBy: req.user.id
+        scannedBy: req.user!.id
       });
       
       // Update registration status
@@ -275,12 +275,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { eventId } = req.query;
       
-      let attendance;
+      let attendance: any[] = [];
       if (eventId) {
         attendance = await storage.getEventAttendance(parseInt(eventId as string));
-      } else {
-        // Get all attendance - this would need to be implemented in storage
-        attendance = [];
       }
       
       // Create Excel workbook
