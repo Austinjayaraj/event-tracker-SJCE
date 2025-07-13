@@ -1,0 +1,127 @@
+🔐 Project Title: QR Code-Based Attendance Management System
+📚 Project Description:
+Build a web-based attendance tracking system for St. Joseph’s College of Engineering using QR code technology. The system includes two dashboards: Admin and Student. Admins can manage events and attendance, while students can register for events and receive QR codes for check-in.
+
+👥 User Roles:
+Admin
+
+Student
+
+🧑‍💼 Admin Functionalities:
+1. Admin Login Page:
+Branding: College name and logo.
+
+Fields: Login ID, Password
+
+Button: Login
+
+2. Admin Dashboard (after login):
+✅ Add Student:
+
+Form fields: Name, Roll Number (Student ID), Department, Section, Email, Password.
+
+Option to mark user as admin.
+
+📅 Manage Events:
+
+Three event types:
+
+College Events
+
+Department Events
+
+Hackathons
+
+Each event must include:
+
+Title, Date, Time, Venue, Description (All required).
+
+Admin can create and delete events.
+
+🧪 Hackathon Events:
+
+Allow students to register and upload files (e.g., PDFs, ZIPs).
+
+Admin can:
+
+Create sub-events or rounds.
+
+View uploaded files.
+
+Publish results for each round.
+
+📷 QR Scan for Attendance:
+
+Admin selects an event and scans student QR codes to mark attendance in real-time.
+
+📊 View Attendance:
+
+Filter attendance by event.
+
+Export attendance data to Excel.
+
+🔍 Search and Export:
+
+Search students or records by any field (e.g., name, ID, event).
+
+Export filtered results to Excel.
+
+🧑‍🎓 Student Functionalities:
+1. Student Login / Signup Page:
+Branding: College name and logo.
+
+Login: Student ID and password.
+
+Signup: Required fields:
+
+Name, Student ID, Department, Section, Email, Password
+
+2. Student Dashboard (after login):
+View list of available events (College, Department, Hackathons).
+
+Register for events.
+
+Upon registration, receive a downloadable QR code (unique per event).
+
+For hackathons, allow file upload for project submissions.
+
+🛠️ Tools and Technologies (suggested stack):
+Frontend: HTML, CSS, JavaScript (React or basic JS)
+
+Backend: Node.js / Python (Flask/Django) / PHP
+
+Database: MongoDB / MySQL / Firebase
+
+QR Code: QR Code Generator library (e.g., qrcode npm package)
+
+File Uploads: Use Multer (Node.js) or Django FileField
+
+Excel Export: xlsx library or relevant backend package
+
+Authentication: Basic session or JWT auth
+
+💡 Features to Highlight:
+QR-based instant attendance tracking.
+
+Event and sub-event management.
+
+File upload and result publishing system for hackathons.
+
+Excel export for admin reporting.
+
+Role-based login and dashboard system.
+
+📌 Replit Instructions:
+Create a full-stack application with:
+
+Separate views/routes for admin and student dashboards.
+
+Authentication system.
+
+Backend APIs for CRUD operations.
+
+Frontend components for interaction and UI.
+
+QR code generation and scanning capabilities.
+
+Export functions for admin data needs.
