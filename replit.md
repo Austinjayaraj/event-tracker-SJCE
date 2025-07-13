@@ -7,6 +7,20 @@ This is a full-stack web application for St. Joseph's College of Engineering des
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+UI/UX Preferences: User wants the application to look good and attractive with React frontend.
+
+## Recent Changes
+
+- **July 13, 2025**: Successfully implemented complete QR code attendance management system
+  - Built full-stack application with React frontend and Express backend
+  - Implemented role-based authentication (admin/student dashboards)
+  - Added PostgreSQL database with all required tables
+  - Created sample data including admin user (username: admin, password: admin123)
+  - Added student user (username: student01, password: student123)
+  - Implemented QR code generation and scanning functionality
+  - Added file upload system for hackathon submissions
+  - Applied college branding with custom colors and styling
+  - Server running on port 5000 with proper configuration
 
 ## System Architecture
 
