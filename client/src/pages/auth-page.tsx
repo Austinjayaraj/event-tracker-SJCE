@@ -61,6 +61,7 @@ export default function AuthPage() {
   }
 
   const handleLogin = (data: LoginForm) => {
+    console.log(data," logged in");
     loginMutation.mutate(data);
   };
 
@@ -70,8 +71,17 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-college-blue to-college-dark">
-      <div className="max-w-md w-full mx-4">
+    <div
+      className="min-h-screen flex items-center justify-center relative"
+      style={{
+        backgroundImage: `url('/sjc-background.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Overlay for readability */}
+      <div className="absolute inset-0 bg-black bg-opacity-50 z-0" />
+      <div className="max-w-md w-full mx-4 z-10">
         <Card className="shadow-2xl">
           <CardHeader className="text-center">
             <div className="w-20 h-20 bg-college-blue rounded-full flex items-center justify-center mx-auto mb-4">
@@ -124,7 +134,7 @@ export default function AuthPage() {
                   </div>
                   <Button
                     type="submit"
-                    className="w-full bg-college-blue hover:bg-college-dark"
+                    className="w-full bg-black hover:bg-college-dark"
                     disabled={loginMutation.isPending}
                   >
                     {loginMutation.isPending ? "Signing In..." : "Sign In"}
@@ -166,7 +176,7 @@ export default function AuthPage() {
                       </div>
                       <Button
                         type="submit"
-                        className="w-full bg-college-blue hover:bg-college-dark"
+                        className="w-full bg-black hover:bg-college-dark"
                         disabled={loginMutation.isPending}
                       >
                         {loginMutation.isPending ? "Signing In..." : "Sign In"}
@@ -224,6 +234,15 @@ export default function AuthPage() {
                               <SelectItem value="EEE">EEE</SelectItem>
                               <SelectItem value="MECH">MECH</SelectItem>
                               <SelectItem value="CIVIL">CIVIL</SelectItem>
+                              <SelectItem value="IT">IT</SelectItem>
+                              <SelectItem value="BIO TECH">BIO TECH</SelectItem>
+                              <SelectItem value="ADS">ADS</SelectItem>
+                              <SelectItem value="AML">AML</SelectItem>
+                              <SelectItem value="CYBER">CYBER</SelectItem>
+                              <SelectItem value="EIE">EIE</SelectItem>
+                              <SelectItem value="CHEM">CHEM</SelectItem>
+                              <SelectItem value="MBA">MBA</SelectItem>
+                              <SelectItem value="ME">ME</SelectItem>
                             </SelectContent>
                           </Select>
                           {registerForm.formState.errors.department && (
@@ -240,6 +259,8 @@ export default function AuthPage() {
                               <SelectItem value="A">A</SelectItem>
                               <SelectItem value="B">B</SelectItem>
                               <SelectItem value="C">C</SelectItem>
+                              <SelectItem value="D">D</SelectItem>
+                              <SelectItem value="E">E</SelectItem>
                             </SelectContent>
                           </Select>
                           {registerForm.formState.errors.section && (
@@ -285,7 +306,7 @@ export default function AuthPage() {
                       </div>
                       <Button
                         type="submit"
-                        className="w-full bg-college-blue hover:bg-college-dark"
+                        className="w-full bg-black hover:bg-college-dark"
                         disabled={registerMutation.isPending}
                       >
                         {registerMutation.isPending ? "Creating Account..." : "Create Account"}

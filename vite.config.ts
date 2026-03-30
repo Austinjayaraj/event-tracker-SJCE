@@ -33,5 +33,6 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    // Proxy removed for unified frontend-backend setup
   },
 });

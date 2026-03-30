@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { QRCodeModal } from "@/components/qr-code-modal";
 import { FileUploadModal } from "@/components/file-upload-modal";
+import { PhotoUploadModal } from "@/components/photo-upload-modal";
 import { 
   GraduationCap, 
   Calendar, 
@@ -20,7 +21,8 @@ import {
   Download,
   Upload,
   CalendarCheck,
-  Code
+  Code,
+  Camera
 } from "lucide-react";
 
 export default function StudentDashboard() {
@@ -28,6 +30,7 @@ export default function StudentDashboard() {
   const { toast } = useToast();
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [fileModalOpen, setFileModalOpen] = useState(false);
+  const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [selectedRegistration, setSelectedRegistration] = useState<any>(null);
 
   // Fetch available events
@@ -48,6 +51,7 @@ export default function StudentDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/registrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({
         title: "Success",
         description: "Successfully registered for the event",
@@ -74,6 +78,11 @@ export default function StudentDashboard() {
   const handleFileUpload = (registration: any) => {
     setSelectedRegistration(registration);
     setFileModalOpen(true);
+  };
+
+  const handlePhotoUpload = (registration: any) => {
+    setSelectedRegistration(registration);
+    setPhotoModalOpen(true);
   };
 
   const getRegistrationStatus = (eventId: number) => {
@@ -105,36 +114,48 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-xl border-b-2 border-blue-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-college-blue rounded-full flex items-center justify-center mr-3">
-                <GraduationCap className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Student Dashboard</h1>
-                <p className="text-sm text-gray-600">Welcome back, {user?.name}</p>
+              <div className="flex items-center space-x-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center shadow-lg">
+                  <GraduationCap className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">St. Joseph's College</h1>
+                  <p className="text-sm text-gray-600 font-medium">Attendance Management System</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            
+            <div className="flex items-center space-x-6">
               <div className="relative">
-                <Button variant="ghost" size="sm">
-                  <Bell className="h-5 w-5 text-gray-400" />
+                <Button variant="ghost" size="sm" className="relative p-3 hover:bg-blue-50 rounded-full">
+                  <Bell className="h-6 w-6 text-gray-600" />
+                  <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-semibold">
+                    2
+                  </span>
                 </Button>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  2
-                </span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-college-blue rounded-full flex items-center justify-center">
-                  <User className="text-white text-sm" />
+              
+              <div className="flex items-center space-x-3 bg-gray-50 rounded-xl px-4 py-2">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center">
+                  <User className="h-5 w-5 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-700">{user?.name}</span>
-                <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()}>
-                  <ChevronDown className="h-4 w-4" />
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                  <p className="text-xs text-gray-600 font-medium">{user?.studentId} • {user?.department}</p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => logoutMutation.mutate()}
+                  className="text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg px-3 py-2"
+                >
+                  Logout
                 </Button>
               </div>
             </div>
@@ -145,133 +166,159 @@ export default function StudentDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Student Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
+          <div className="college-card">
+            <div className="college-card-content">
               <div className="flex items-center">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <CalendarCheck className="text-blue-600 h-6 w-6" />
+                <div className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                  <CalendarCheck className="text-white h-7 w-7" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Events Registered</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                <div className="ml-5">
+                  <p className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Events Registered</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-1">
                     {registrationsLoading ? "..." : registrations?.length || 0}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">Total registrations</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
+            </div>
+          </div>
+          
+          <div className="college-card">
+            <div className="college-card-content">
               <div className="flex items-center">
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <QrCode className="text-green-600 h-6 w-6" />
+                <div className="p-4 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg">
+                  <QrCode className="text-white h-7 w-7" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">QR Codes</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                <div className="ml-5">
+                  <p className="text-sm font-semibold text-gray-600 uppercase tracking-wide">QR Codes</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-1">
                     {registrationsLoading ? "..." : registrations?.filter((reg: any) => reg.qrCode).length || 0}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">Available for download</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-6">
+            </div>
+          </div>
+          
+          <div className="college-card">
+            <div className="college-card-content">
               <div className="flex items-center">
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <Trophy className="text-purple-600 h-6 w-6" />
+                <div className="p-4 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-xl shadow-lg">
+                  <Trophy className="text-white h-7 w-7" />
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Hackathons</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                <div className="ml-5">
+                  <p className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Hackathons</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-1">
                     {registrationsLoading ? "..." : registrations?.filter((reg: any) => {
                       const event = events?.find((e: any) => e.id === reg.eventId);
                       return event?.eventType === "hackathon";
                     }).length || 0}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">Competition events</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Available Events */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Available Events</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="college-card mb-8">
+          <div className="college-card-header">
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center">
+              <Calendar className="h-6 w-6 text-blue-600 mr-3" />
+              Available Events
+            </h2>
+            <p className="text-gray-600 mt-1">Register for upcoming events and manage your attendance</p>
+          </div>
+          <div className="college-card-content">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {eventsLoading ? (
-                <div className="col-span-full text-center">Loading events...</div>
+                <div className="col-span-full text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-500 font-medium">Loading events...</p>
+                </div>
               ) : (
                 events?.map((event: any) => {
                   const registration = getRegistrationStatus(event.id);
                   return (
-                    <Card key={event.id} className="hover:shadow-md transition-shadow">
-                      <CardContent className="p-6">
+                    <div key={event.id} className="college-card hover:shadow-lg transition-all duration-300 border-l-4 border-l-blue-500">
+                      <div className="college-card-content">
                         <div className="flex items-center justify-between mb-4">
-                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                          <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
                             {getEventIcon(event.eventType)}
                           </div>
-                          <Badge className={getEventBadgeColor(event.eventType)}>
-                            {registration ? "Registered" : "Open"}
+                          <Badge className={`${getEventBadgeColor(event.eventType)} font-semibold px-3 py-1`}>
+                            {registration ? (registration.status === "attended" ? "Attended" : "Registered") : "Open"}
                           </Badge>
                         </div>
-                        <h4 className="text-lg font-semibold text-gray-900 mb-2">{event.title}</h4>
+                        <h4 className="text-xl font-bold text-gray-900 mb-2">{event.title}</h4>
                         <p className="text-sm text-gray-600 mb-4">{event.description}</p>
-                        <div className="space-y-2 text-sm text-gray-600 mb-4">
-                          <div className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-2" />
-                            <span>{new Date(event.date).toLocaleDateString()}</span>
+                        <div className="space-y-3 mb-6">
+                          <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                            <Calendar className="w-4 h-4 mr-2 text-blue-600" />
+                            <span className="font-medium">{new Date(event.date).toLocaleDateString()}</span>
                           </div>
-                          <div className="flex items-center">
-                            <span className="w-4 h-4 mr-2">🕐</span>
-                            <span>{event.startTime} - {event.endTime}</span>
+                          <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                            <span className="w-4 h-4 mr-2 text-blue-600">🕐</span>
+                            <span className="font-medium">{event.startTime} - {event.endTime}</span>
                           </div>
-                          <div className="flex items-center">
-                            <span className="w-4 h-4 mr-2">📍</span>
-                            <span>{event.venue}</span>
+                          <div className="flex items-center text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                            <span className="w-4 h-4 mr-2 text-blue-600">📍</span>
+                            <span className="font-medium">{event.venue}</span>
                           </div>
                         </div>
                         {registration ? (
-                          <div className="space-y-2">
+                          <div className="space-y-3">
                             <Button
-                              variant="outline"
-                              className="w-full"
+                              className="w-full btn-college-primary"
                               onClick={() => handleDownloadQR(registration)}
                             >
                               <Download className="w-4 h-4 mr-2" />
                               Download QR Code
                             </Button>
-                            {event.eventType === "hackathon" && (
-                              <Button
-                                variant="outline"
-                                className="w-full"
-                                onClick={() => handleFileUpload(registration)}
-                              >
-                                <Upload className="w-4 h-4 mr-2" />
-                                Upload Files
-                              </Button>
+                            {registration.status !== "attended" && (
+                              <>
+                                <Button
+                                  className="w-full btn-college-outline"
+                                  onClick={() => handlePhotoUpload(registration)}
+                                >
+                                  <Camera className="w-4 h-4 mr-2" />
+                                  {registration.photoPath ? "Update Photo" : "Upload Photo"}
+                                </Button>
+                                {event.eventType === "hackathon" && (
+                                  <Button
+                                    className="w-full btn-college-secondary"
+                                    onClick={() => handleFileUpload(registration)}
+                                  >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Files
+                                  </Button>
+                                )}
+                              </>
+                            )}
+                            {registration.status === "attended" && (
+                              <div className="text-center text-sm text-green-600 font-semibold bg-green-50 rounded-lg py-2">
+                                ✓ Attendance Confirmed
+                              </div>
                             )}
                           </div>
                         ) : (
                           <Button
-                            className="w-full bg-college-blue hover:bg-college-dark"
+                            className="w-full btn-college-primary text-lg py-3"
                             onClick={() => handleRegister(event.id)}
                             disabled={registerMutation.isPending}
                           >
                             {registerMutation.isPending ? "Registering..." : "Register Now"}
                           </Button>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   );
                 })
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* My Registrations */}
         <Card>
@@ -369,6 +416,14 @@ export default function StudentDashboard() {
         isOpen={fileModalOpen}
         onClose={() => setFileModalOpen(false)}
         registration={selectedRegistration}
+      />
+      <PhotoUploadModal
+        isOpen={photoModalOpen}
+        onClose={() => setPhotoModalOpen(false)}
+        registration={selectedRegistration}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/registrations"] });
+        }}
       />
     </div>
   );
