@@ -1,6 +1,9 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, Share, X } from "lucide-react";
+import QRCode from 'react-qr-code';
+import { toPng } from 'html-to-image';
+import { useRef } from 'react';
 
 interface QRCodeModalProps {
   isOpen: boolean;
@@ -9,25 +12,25 @@ interface QRCodeModalProps {
 }
 
 export function QRCodeModal({ isOpen, onClose, registration }: QRCodeModalProps) {
-  const handleDownload = () => {
-    if (registration?.qrCode) {
-      const link = document.createElement("a");
-      link.href = registration.qrCode;
-      link.download = `qr-code-${registration.id}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+  const qrRef = useRef<HTMLDivElement>(null);
+
+  const handleDownload = async () => {
+    if (qrRef.current) {
+      const node = qrRef.current.querySelector('svg');
+      if (node) {
+        const dataUrl = await toPng(node as HTMLElement);
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `qr-code-${registration.id}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     }
   };
 
   const handleShare = () => {
-    if (navigator.share && registration?.qrCode) {
-      navigator.share({
-        title: "Event QR Code",
-        text: "Here's my QR code for the event",
-        url: registration.qrCode
-      });
-    }
+    // Optional: implement share functionality for QR code image
   };
 
   return (
@@ -43,12 +46,18 @@ export function QRCodeModal({ isOpen, onClose, registration }: QRCodeModalProps)
         </DialogHeader>
         <div className="text-center">
           <div className="mb-6">
-            <div className="w-48 h-48 bg-gray-100 rounded-lg mx-auto flex items-center justify-center mb-4">
+            <div ref={qrRef} className="w-48 h-48 bg-gray-100 rounded-lg mx-auto flex items-center justify-center mb-4">
               {registration?.qrCode ? (
-                <img
-                  src={registration.qrCode}
-                  alt="QR Code"
-                  className="w-40 h-40 rounded-md"
+                <QRCode
+                  value={JSON.stringify({
+                    userId: registration.userId,
+                    eventId: registration.eventId,
+                    token: registration.qrCode
+                  })}
+                  size={200}
+                  bgColor="#f3f4f6"
+                  fgColor="#222"
+                  level="H"
                 />
               ) : (
                 <div className="w-40 h-40 bg-white border-4 border-gray-800 rounded-lg flex items-center justify-center">

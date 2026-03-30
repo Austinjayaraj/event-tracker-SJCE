@@ -4,31 +4,35 @@
 
 :root {
   --background: hsl(0, 0%, 100%);
-  --foreground: hsl(20, 14.3%, 4.1%);
-  --muted: hsl(60, 4.8%, 95.9%);
-  --muted-foreground: hsl(25, 5.3%, 44.7%);
+  --foreground: hsl(220, 13%, 18%);
+  --muted: hsl(210, 20%, 98%);
+  --muted-foreground: hsl(220, 8.9%, 46.1%);
   --popover: hsl(0, 0%, 100%);
-  --popover-foreground: hsl(20, 14.3%, 4.1%);
+  --popover-foreground: hsl(220, 13%, 18%);
   --card: hsl(0, 0%, 100%);
-  --card-foreground: hsl(20, 14.3%, 4.1%);
-  --border: hsl(20, 5.9%, 90%);
-  --input: hsl(20, 5.9%, 90%);
-  --primary: hsl(207, 90%, 54%);
-  --primary-foreground: hsl(211, 100%, 99%);
-  --secondary: hsl(60, 4.8%, 95.9%);
-  --secondary-foreground: hsl(24, 9.8%, 10%);
-  --accent: hsl(60, 4.8%, 95.9%);
-  --accent-foreground: hsl(24, 9.8%, 10%);
+  --card-foreground: hsl(220, 13%, 18%);
+  --border: hsl(214, 32%, 91%);
+  --input: hsl(214, 32%, 91%);
+  --primary: hsl(221, 83%, 53%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --secondary: hsl(210, 40%, 96%);
+  --secondary-foreground: hsl(222, 84%, 5%);
+  --accent: hsl(210, 40%, 96%);
+  --accent-foreground: hsl(222, 84%, 5%);
   --destructive: hsl(0, 84.2%, 60.2%);
-  --destructive-foreground: hsl(60, 9.1%, 97.8%);
-  --ring: hsl(20, 14.3%, 4.1%);
-  --radius: 0.5rem;
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --ring: hsl(221, 83%, 53%);
+  --radius: 0.75rem;
   
-  /* College-specific colors */
-  --college-blue: hsl(207, 90%, 54%);
-  --college-dark: hsl(207, 100%, 26%);
-  --college-gold: hsl(45, 100%, 51%);
-  --college-light: hsl(207, 100%, 95%);
+  /* St. Joseph's College specific colors */
+  --college-primary: hsl(221, 83%, 53%);
+  --college-primary-dark: hsl(221, 83%, 43%);
+  --college-secondary: hsl(45, 93%, 47%);
+  --college-accent: hsl(210, 40%, 96%);
+  --college-success: hsl(142, 76%, 36%);
+  --college-warning: hsl(38, 92%, 50%);
+  --college-error: hsl(0, 84%, 60%);
+  --college-info: hsl(199, 89%, 48%);
 }
 
 .dark {
@@ -65,19 +69,94 @@
 }
 
 @layer utilities {
-  .college-blue {
-    background-color: var(--college-blue);
+  /* St. Joseph's College Brand Colors */
+  .college-primary {
+    background-color: var(--college-primary);
+    color: white;
   }
   
-  .college-dark {
-    background-color: var(--college-dark);
+  .college-primary-dark {
+    background-color: var(--college-primary-dark);
+    color: white;
   }
   
-  .college-gold {
-    background-color: var(--college-gold);
+  .college-secondary {
+    background-color: var(--college-secondary);
+    color: white;
   }
   
-  .college-light {
-    background-color: var(--college-light);
+  .college-accent {
+    background-color: var(--college-accent);
+    color: var(--college-primary-dark);
+  }
+  
+  .college-success {
+    background-color: var(--college-success);
+    color: white;
+  }
+  
+  .college-warning {
+    background-color: var(--college-warning);
+    color: white;
+  }
+  
+  .college-error {
+    background-color: var(--college-error);
+    color: white;
+  }
+  
+  .college-info {
+    background-color: var(--college-info);
+    color: white;
+  }
+  
+  /* Text colors */
+  .text-college-primary {
+    color: var(--college-primary);
+  }
+  
+  .text-college-secondary {
+    color: var(--college-secondary);
+  }
+  
+  /* Border colors */
+  .border-college-primary {
+    border-color: var(--college-primary);
+  }
+  
+  /* Hover effects */
+  .hover-college-primary:hover {
+    background-color: var(--college-primary-dark);
+    color: white;
+  }
+  
+  /* College card styling */
+  .college-card {
+    @apply bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200;
+  }
+  
+  .college-card-header {
+    @apply border-b border-gray-100 px-6 py-4;
+  }
+  
+  .college-card-content {
+    @apply px-6 py-4;
+  }
+  
+  .college-card-footer {
+    @apply border-t border-gray-100 px-6 py-4;
+  }
+  
+  /* College button styles */
+  .btn-college-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-college-secondary {
+    @apply bg-yellow-500 hover:bg-yellow-600 text-white font-medium px-4 py-2 rounded-lg transition-colors duration-200;
+  }
+  
+  .btn-college-outline {
+    @apply border-2 border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white font-medium px-4 py-2 rounded-lg transition-all duration-200;
   }
 }

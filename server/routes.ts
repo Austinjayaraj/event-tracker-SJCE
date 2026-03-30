@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertEventSchema, insertRegistrationSchema, insertAttendanceSchema, insertHackathonSubmissionSchema, insertHackathonRoundSchema, insertHackathonResultSchema } from "@shared/schema";
+import { insertEventSchema, insertRegistrationSchema, insertRegistrationBackendSchema, insertAttendanceSchema, insertHackathonSubmissionSchema, insertHackathonRoundSchema, insertHackathonResultSchema } from "@shared/schema";
 import { z } from "zod";
 import QRCode from "qrcode";
 import multer from "multer";
@@ -11,7 +11,7 @@ import fs from "fs";
 import { randomBytes } from "crypto";
 import * as XLSX from "xlsx";
 
-// File upload configuration
+// File upload configuration for documents
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -42,8 +42,40 @@ const upload = multer({
   }
 });
 
+// Photo upload configuration for images
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
+      cb(null, "photo-" + uniqueSuffix + path.extname(file.originalname));
+    }
+  }),
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = file.mimetype.startsWith('image/');
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error("Only JPG, PNG, GIF image files are allowed"));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit for photos
+  }
+});
+
 function requireAuth(req: any, res: any, next: any) {
-  if (!req.isAuthenticated()) {
+  console.log("requireAuth:", { isAuthenticated: req.isAuthenticated?.(), user: req.user });
+  if (!req.isAuthenticated || !req.isAuthenticated()) {
     return res.status(401).json({ message: "Authentication required" });
   }
   next();
@@ -63,10 +95,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard stats
   app.get("/api/stats", requireAuth, async (req, res) => {
     try {
+      console.log("Fetching stats...");
       const stats = await storage.getStats();
+      console.log("Stats fetched:", stats);
       res.json(stats);
     } catch (error) {
+      console.error("Stats fetch error:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  // Debug endpoint to check database contents
+  app.get("/api/debug/database", requireAdmin, async (req, res) => {
+    try {
+      console.log("Debug: Checking database contents...");
+      
+      // Get raw counts
+      const users = await storage.getAllUsers();
+      const events = await storage.getActiveEvents();
+      const registrations = await storage.getAllRegistrations();
+      const attendance = await storage.getAllAttendance();
+      
+      const debugInfo = {
+        users: {
+          total: users.length,
+          students: users.filter(u => u.role === "student").length,
+          admins: users.filter(u => u.role === "admin").length,
+          sample: users.slice(0, 3).map(u => ({ id: u.id, name: u.name, role: u.role }))
+        },
+        events: {
+          total: events.length,
+          sample: events.slice(0, 3).map(e => ({ id: e.id, title: e.title, eventType: e.eventType }))
+        },
+        registrations: {
+          total: registrations.length,
+          sample: registrations.slice(0, 3).map(r => ({ id: r.id, userId: r.userId, eventId: r.eventId }))
+        },
+        attendance: {
+          total: attendance.length,
+          sample: attendance.slice(0, 3).map(a => ({ id: a.id, userId: a.userId, eventId: a.eventId }))
+        }
+      };
+      
+      console.log("Debug info:", debugInfo);
+      res.json(debugInfo);
+    } catch (error) {
+      console.error("Debug error:", error);
+      res.status(500).json({ message: "Failed to fetch debug info", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -142,42 +217,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Photo upload for registration
+  app.post("/api/registrations/upload-photo", requireAuth, photoUpload.single("photo"), async (req, res) => {
+    try {
+      console.log("Photo upload request received");
+      console.log("Request body:", req.body);
+      console.log("Request file:", req.file);
+      console.log("Request headers:", req.headers);
+      
+      if (!req.file) {
+        console.log("No file received in request");
+        return res.status(400).json({ message: "No photo uploaded" });
+      }
+
+      const { registrationId } = req.body;
+      if (!registrationId) {
+        console.log("No registration ID provided");
+        return res.status(400).json({ message: "Registration ID is required" });
+      }
+
+      console.log("Updating registration photo for ID:", registrationId);
+      // Update registration with photo path
+      const updatedRegistration = await storage.updateRegistrationPhoto(parseInt(registrationId), req.file.filename);
+      
+      if (!updatedRegistration) {
+        console.log("Registration not found for ID:", registrationId);
+        return res.status(404).json({ message: "Registration not found" });
+      }
+
+      console.log("Photo uploaded successfully:", req.file.filename);
+      res.json({
+        message: "Photo uploaded successfully",
+        photoPath: req.file.filename,
+        registration: updatedRegistration
+      });
+    } catch (error) {
+      console.error("Photo upload error:", error);
+      res.status(500).json({ message: "Failed to upload photo" });
+    }
+  });
+
   // Registration routes
   app.post("/api/registrations", requireAuth, async (req, res) => {
+    console.log("Registration raw body:", req.body);
     try {
       const registrationData = insertRegistrationSchema.parse(req.body);
-      
       // Check if already registered
       const existingRegistrations = await storage.getUserRegistrations(req.user!.id);
       const alreadyRegistered = existingRegistrations.find(r => r.eventId === registrationData.eventId);
-      
       if (alreadyRegistered) {
         return res.status(400).json({ message: "Already registered for this event" });
       }
-      
-      // Generate QR code
+      // Fetch user and event details
+      const user = await storage.getUser(req.user!.id);
+      const event = await storage.getEvent(registrationData.eventId);
+      if (!user || !event) {
+        return res.status(400).json({ message: "User or event not found" });
+      }
+      // Generate QR code with detailed info
       const qrData = {
-        userId: req.user!.id,
-        eventId: registrationData.eventId,
+        userId: user.id,
+        name: user.name,
+        studentId: user.studentId,
+        department: user.department,
+        eventId: event.id,
+        eventTitle: event.title,
         timestamp: Date.now(),
         token: randomBytes(16).toString('hex')
       };
-      
-      const qrCode = await QRCode.toDataURL(JSON.stringify(qrData));
-      
-      const registration = await storage.createRegistration({
+      // const qrCode = await QRCode.toDataURL(JSON.stringify(qrData));
+      const qrCode = qrData.token; // Store only the short token in the DB
+      // Validate backend registration object
+      const backendRegistration = insertRegistrationBackendSchema.parse({
         ...registrationData,
-        userId: req.user!.id,
+        userId: user.id,
         qrCode: qrCode
       });
-      
+      const registration = await storage.createRegistration(backendRegistration);
       res.status(201).json(registration);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        res.status(400).json({ message: "Invalid registration data", errors: error.errors });
-      } else {
-        res.status(500).json({ message: "Failed to create registration" });
+        console.error("Zod validation error:", error.errors);
+        return res.status(400).json({ message: "Invalid registration data", errors: error.errors });
       }
+      // Add detailed error logging
+      console.error("Registration error (raw):", error);
+      if (error instanceof Error) {
+        console.error("Registration error (stack):", error.stack);
+      } else {
+        try {
+          console.error("Registration error (JSON):", JSON.stringify(error, null, 2));
+        } catch {}
+      }
+      res.status(500).json({ message: "Failed to create registration" });
     }
   });
 
@@ -205,6 +337,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { qrCode, eventId } = req.body;
       
+      console.log("QR Scan request:", { qrCode, eventId });
+      
       if (!qrCode || !eventId) {
         return res.status(400).json({ message: "QR code and event ID are required" });
       }
@@ -213,59 +347,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let qrData;
       try {
         qrData = JSON.parse(qrCode);
-      } catch {
+        console.log("Parsed QR data:", qrData);
+      } catch (parseError) {
+        console.error("QR parse error:", parseError);
         return res.status(400).json({ message: "Invalid QR code format" });
       }
       
-      // Validate QR code data
-      if (!qrData.userId || !qrData.eventId || qrData.eventId !== eventId) {
-        return res.status(400).json({ message: "Invalid QR code data" });
+      // Handle both token-based and full data QR codes
+      let registration;
+      if (qrData.token) {
+        // Token-based QR code (new format)
+        try {
+          registration = await storage.getRegistrationByQRCode(qrData.token);
+          console.log("Found registration by token:", registration);
+        } catch (dbError) {
+          console.error("Database error when fetching registration by QR code:", dbError);
+          return res.status(500).json({ message: "Database error while fetching registration" });
+        }
+        
+        if (!registration) {
+          return res.status(404).json({ message: "Registration not found" });
+        }
+        
+        // Validate event ID matches
+        if (registration.eventId !== parseInt(eventId)) {
+          return res.status(400).json({ message: "QR code is for a different event" });
+        }
+      } else {
+        // Legacy format with full data
+        if (!qrData.userId || !qrData.eventId || qrData.eventId !== parseInt(eventId)) {
+          console.log("QR validation failed:", { 
+            hasUserId: !!qrData.userId, 
+            hasEventId: !!qrData.eventId, 
+            qrEventId: qrData.eventId, 
+            requestEventId: eventId,
+            eventIdMatch: qrData.eventId === parseInt(eventId)
+          });
+          return res.status(400).json({ message: "Invalid QR code data" });
+        }
+        
+        // Check if registration exists
+        try {
+          const registrations = await storage.getUserRegistrations(qrData.userId);
+          console.log("User registrations:", registrations);
+          registration = registrations.find(r => r.eventId === parseInt(eventId));
+          console.log("Found registration:", registration);
+        } catch (dbError) {
+          console.error("Database error when fetching user registrations:", dbError);
+          return res.status(500).json({ message: "Database error while fetching registrations" });
+        }
       }
-      
-      // Check if registration exists
-      const registrations = await storage.getUserRegistrations(qrData.userId);
-      const registration = registrations.find(r => r.eventId === eventId);
       
       if (!registration) {
         return res.status(404).json({ message: "Registration not found" });
       }
       
       // Check if already attended
-      const existingAttendance = await storage.getAttendanceByRegistration(registration.id);
+      let existingAttendance;
+      try {
+        existingAttendance = await storage.getAttendanceByRegistration(registration.id);
+        console.log("Existing attendance:", existingAttendance);
+      } catch (dbError) {
+        console.error("Database error when checking existing attendance:", dbError);
+        return res.status(500).json({ message: "Database error while checking attendance" });
+      }
+      
       if (existingAttendance) {
         return res.status(400).json({ message: "Already marked as attended" });
       }
       
       // Mark attendance
-      const attendance = await storage.createAttendance({
-        userId: qrData.userId,
-        eventId: eventId,
-        registrationId: registration.id,
-        scannedBy: req.user!.id
-      });
+      let attendance;
+      try {
+        attendance = await storage.createAttendance({
+          userId: registration.userId,
+          eventId: eventId,
+          registrationId: registration.id,
+          scannedBy: req.user!.id
+        });
+        console.log("Created attendance record:", attendance);
+      } catch (dbError) {
+        console.error("Database error when creating attendance:", dbError);
+        return res.status(500).json({ message: "Database error while creating attendance" });
+      }
       
       // Update registration status
-      await storage.updateRegistrationStatus(registration.id, "attended");
+      try {
+        await storage.updateRegistrationStatus(registration.id, "attended");
+        console.log("Updated registration status to attended");
+      } catch (dbError) {
+        console.error("Database error when updating registration status:", dbError);
+        // Don't fail the request here, attendance was already marked
+        console.warn("Warning: Attendance marked but failed to update registration status");
+      }
       
       // Get user info for response
-      const user = await storage.getUser(qrData.userId);
+      let user;
+      try {
+        user = await storage.getUser(registration.userId);
+        console.log("Retrieved user info:", user);
+      } catch (dbError) {
+        console.error("Database error when fetching user:", dbError);
+        // Don't fail the request here, we can still return success
+        user = null;
+      }
       
       res.json({
         message: "Attendance marked successfully",
         user: user,
-        attendance: attendance
+        attendance: attendance,
+        registration: registration
       });
     } catch (error) {
-      res.status(500).json({ message: "Failed to process QR scan" });
+      console.error("Unexpected error in QR scan:", error);
+      console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace");
+      res.status(500).json({ 
+        message: "Failed to process QR scan",
+        error: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.message : String(error)) : undefined
+      });
     }
   });
 
   // Attendance routes
+  app.get("/api/attendance", requireAdmin, async (req, res) => {
+    try {
+      const attendanceRecords = await storage.getAllAttendance();
+      // Fetch user and event details for each record
+      const enriched = await Promise.all(attendanceRecords.map(async (record) => {
+        const user = await storage.getUser(record.userId);
+        const event = await storage.getEvent(record.eventId);
+        return {
+          ...record,
+          user,
+          event,
+        };
+      }));
+      res.json(enriched);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch attendance" });
+    }
+  });
+
   app.get("/api/events/:id/attendance", requireAdmin, async (req, res) => {
     try {
       const eventId = parseInt(req.params.id);
-      const attendance = await storage.getEventAttendance(eventId);
-      res.json(attendance);
+      const attendanceRecords = await storage.getEventAttendance(eventId);
+      // Fetch user and event details for each record
+      const enriched = await Promise.all(attendanceRecords.map(async (record) => {
+        const user = await storage.getUser(record.userId);
+        const event = await storage.getEvent(record.eventId);
+        return {
+          ...record,
+          user,
+          event,
+        };
+      }));
+      res.json(enriched);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch attendance" });
     }
@@ -274,24 +511,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/attendance/export", requireAdmin, async (req, res) => {
     try {
       const { eventId } = req.query;
-      
       let attendance: any[] = [];
+      
       if (eventId) {
-        attendance = await storage.getEventAttendance(parseInt(eventId as string));
+        // Export specific event attendance
+        console.log("Export requested for eventId:", eventId);
+        let raw = await storage.getEventAttendance(parseInt(eventId as string));
+        console.log("Raw attendance records:", raw);
+        attendance = await Promise.all(raw.map(async (record) => {
+          const user = await storage.getUser(record.userId);
+          const event = await storage.getEvent(record.eventId);
+          return {
+            Name: user?.name,
+            StudentID: user?.studentId,
+            Department: user?.department,
+            Event: event?.title,
+            CheckInTime: record.attendedAt,
+            Status: "Attended"
+          };
+        }));
+      } else {
+        // Export all attendance
+        console.log("Export requested for all attendance");
+        let raw = await storage.getAllAttendance();
+        console.log("Raw attendance records:", raw);
+        attendance = await Promise.all(raw.map(async (record) => {
+          const user = await storage.getUser(record.userId);
+          const event = await storage.getEvent(record.eventId);
+          return {
+            Name: user?.name,
+            StudentID: user?.studentId,
+            Department: user?.department,
+            Event: event?.title,
+            CheckInTime: record.attendedAt,
+            Status: "Attended"
+          };
+        }));
       }
       
+      console.log("Exporting attendance:", attendance);
       // Create Excel workbook
       const workbook = XLSX.utils.book_new();
       const worksheet = XLSX.utils.json_to_sheet(attendance);
       XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
-      
-      // Generate buffer
       const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
-      
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", "attachment; filename=attendance.xlsx");
+      const filename = eventId ? `attendance-${eventId}.xlsx` : "attendance-all.xlsx";
+      res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
       res.send(buffer);
     } catch (error) {
+      console.error("Export error:", error);
       res.status(500).json({ message: "Failed to export attendance" });
     }
   });
@@ -346,6 +615,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Serve uploaded photos
+  app.get("/api/photos/:filename", (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const photoPath = path.join(process.cwd(), "uploads", filename);
+      
+      if (!fs.existsSync(photoPath)) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+      
+      res.sendFile(photoPath);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to serve photo" });
+    }
+  });
+
   // Hackathon file upload
   app.post("/api/hackathon/upload", requireAuth, upload.array("files"), async (req, res) => {
     try {
@@ -371,6 +656,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(submissions);
     } catch (error) {
       res.status(500).json({ message: "Failed to upload files" });
+    }
+  });
+
+  // List submissions for an event (admin)
+  app.get("/api/hackathon/events/:eventId/submissions", requireAdmin, async (req, res) => {
+    try {
+      const eventId = parseInt(req.params.eventId);
+      const submissions = await storage.getSubmissionsByEvent(eventId);
+      res.json(submissions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch submissions" });
+    }
+  });
+
+  // Mark qualifiers for a round (admin)
+  app.post("/api/hackathon/events/:eventId/qualify", requireAdmin, async (req, res) => {
+    try {
+      const eventId = parseInt(req.params.eventId);
+      const { roundName = "Round 2", qualifiers = [], scoreMap = {}, feedbackMap = {} } = req.body as any;
+      // Ensure round exists
+      const round = await storage.getOrCreateRoundByName(eventId, roundName);
+      const created: any[] = [];
+      for (const registrationId of qualifiers as number[]) {
+        const result = await storage.createHackathonResult({
+          roundId: round.id,
+          registrationId,
+          result: "qualified",
+          score: typeof scoreMap?.[registrationId] === 'number' ? scoreMap[registrationId] : null,
+          feedback: feedbackMap?.[registrationId] ?? null,
+        } as any);
+        created.push(result);
+      }
+      res.status(201).json({ round, results: created });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ message: "Invalid payload", errors: error.errors });
+      } else {
+        res.status(500).json({ message: "Failed to mark qualifiers" });
+      }
+    }
+  });
+
+  // Public endpoint: results for an event (students can view)
+  app.get("/api/hackathon/events/:eventId/results", requireAuth, async (req, res) => {
+    try {
+      const eventId = parseInt(req.params.eventId);
+      const results = await storage.getEventResults(eventId);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch event results" });
     }
   });
 

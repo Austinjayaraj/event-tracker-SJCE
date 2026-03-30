@@ -8,7 +8,7 @@ import {
   type HackathonResult, type InsertHackathonResult
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, count } from "drizzle-orm";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
@@ -41,11 +41,13 @@ export interface IStorage {
   
   // Registration operations
   getRegistration(id: number): Promise<Registration | undefined>;
-  createRegistration(registration: InsertRegistration & { qrCode: string }): Promise<Registration>;
+  createRegistration(registration: InsertRegistration & { qrCode: string; userId: number }): Promise<Registration>;
   getUserRegistrations(userId: number): Promise<Registration[]>;
   getEventRegistrations(eventId: number): Promise<Registration[]>;
   getRegistrationByQRCode(qrCode: string): Promise<Registration | undefined>;
   updateRegistrationStatus(id: number, status: string): Promise<Registration | undefined>;
+  updateRegistrationPhoto(id: number, photoPath: string): Promise<Registration | undefined>;
+  getAllRegistrations(): Promise<Registration[]>;
   
   // Attendance operations
   getAttendance(id: number): Promise<Attendance | undefined>;
@@ -53,6 +55,7 @@ export interface IStorage {
   getEventAttendance(eventId: number): Promise<Attendance[]>;
   getUserAttendance(userId: number): Promise<Attendance[]>;
   getAttendanceByRegistration(registrationId: number): Promise<Attendance | undefined>;
+  getAllAttendance(): Promise<Attendance[]>;
   
   // Hackathon operations
   createHackathonSubmission(submission: InsertHackathonSubmission): Promise<HackathonSubmission>;
@@ -168,7 +171,7 @@ export class DatabaseStorage implements IStorage {
     return registration || undefined;
   }
 
-  async createRegistration(registration: InsertRegistration & { qrCode: string }): Promise<Registration> {
+  async createRegistration(registration: InsertRegistration & { qrCode: string; userId: number }): Promise<Registration> {
     const [newRegistration] = await db.insert(registrations).values(registration).returning();
     return newRegistration;
   }
@@ -182,13 +185,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRegistrationByQRCode(qrCode: string): Promise<Registration | undefined> {
-    const [registration] = await db.select().from(registrations).where(eq(registrations.qrCode, qrCode));
-    return registration || undefined;
+    try {
+      console.log("Searching for registration with QR code:", qrCode);
+      const [registration] = await db.select().from(registrations).where(eq(registrations.qrCode, qrCode));
+      console.log("Found registration:", registration);
+      return registration || undefined;
+    } catch (error) {
+      console.error("Error in getRegistrationByQRCode:", error);
+      throw error;
+    }
   }
 
   async updateRegistrationStatus(id: number, status: string): Promise<Registration | undefined> {
     const [registration] = await db.update(registrations).set({ status }).where(eq(registrations.id, id)).returning();
     return registration || undefined;
+  }
+
+  async updateRegistrationPhoto(id: number, photoPath: string): Promise<Registration | undefined> {
+    const [registration] = await db.update(registrations).set({ photoPath }).where(eq(registrations.id, id)).returning();
+    return registration || undefined;
+  }
+
+  async getAllRegistrations(): Promise<Registration[]> {
+    return await db.select().from(registrations);
   }
 
   // Attendance operations
@@ -215,6 +234,10 @@ export class DatabaseStorage implements IStorage {
     return attendanceRecord || undefined;
   }
 
+  async getAllAttendance(): Promise<Attendance[]> {
+    return await db.select().from(attendance);
+  }
+
   // Hackathon operations
   async createHackathonSubmission(submission: InsertHackathonSubmission): Promise<HackathonSubmission> {
     const [newSubmission] = await db.insert(hackathonSubmissions).values(submission).returning();
@@ -223,6 +246,22 @@ export class DatabaseStorage implements IStorage {
 
   async getSubmissionsByRegistration(registrationId: number): Promise<HackathonSubmission[]> {
     return await db.select().from(hackathonSubmissions).where(eq(hackathonSubmissions.registrationId, registrationId));
+  }
+
+  async getSubmissionsByEvent(eventId: number): Promise<(HackathonSubmission & { registration: Registration; user: User })[]> {
+    // Join submissions -> registrations -> users filtered by event
+    const rows = await db
+      .select()
+      .from(hackathonSubmissions)
+      .innerJoin(registrations, eq(hackathonSubmissions.registrationId, registrations.id))
+      .innerJoin(users, eq(registrations.userId, users.id))
+      .where(eq(registrations.eventId, eventId));
+    // drizzle returns composite rows; normalize shape
+    return rows.map((r: any) => ({
+      ...r.hackathon_submissions,
+      registration: r.registrations,
+      user: r.users,
+    }));
   }
 
   async createHackathonRound(round: InsertHackathonRound): Promise<HackathonRound> {
@@ -234,6 +273,14 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(hackathonRounds).where(eq(hackathonRounds.eventId, eventId));
   }
 
+  async getOrCreateRoundByName(eventId: number, roundName: string): Promise<HackathonRound> {
+    const existing = await db.select().from(hackathonRounds).where(eq(hackathonRounds.eventId, eventId));
+    const found = existing.find(r => r.roundName.toLowerCase() === roundName.toLowerCase());
+    if (found) return found;
+    const [created] = await db.insert(hackathonRounds).values({ eventId, roundName, description: roundName }).returning();
+    return created;
+  }
+
   async createHackathonResult(result: InsertHackathonResult): Promise<HackathonResult> {
     const [newResult] = await db.insert(hackathonResults).values(result).returning();
     return newResult;
@@ -243,6 +290,20 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(hackathonResults).where(eq(hackathonResults.roundId, roundId));
   }
 
+  async getEventResults(eventId: number): Promise<(HackathonResult & { round: HackathonRound })[]> {
+    // Fetch all rounds for the event and their results
+    const rounds = await this.getEventRounds(eventId);
+    if (rounds.length === 0) return [];
+    const all: (HackathonResult & { round: HackathonRound })[] = [] as any;
+    for (const rnd of rounds) {
+      const results = await this.getRoundResults(rnd.id);
+      for (const res of results) {
+        all.push({ ...(res as any), round: rnd });
+      }
+    }
+    return all;
+  }
+
   // Statistics
   async getStats(): Promise<{
     totalStudents: number;
@@ -250,17 +311,52 @@ export class DatabaseStorage implements IStorage {
     totalRegistrations: number;
     totalAttendance: number;
   }> {
-    const [studentsCount] = await db.select({ count: users.id }).from(users).where(eq(users.role, "student"));
-    const [eventsCount] = await db.select({ count: events.id }).from(events);
-    const [registrationsCount] = await db.select({ count: registrations.id }).from(registrations);
-    const [attendanceCount] = await db.select({ count: attendance.id }).from(attendance);
+    console.log("Getting stats from database...");
+    
+    try {
+      // Get all users first to debug
+      const allUsers = await db.select().from(users);
+      console.log("All users in database:", allUsers.length);
+      console.log("Users with role 'student':", allUsers.filter(u => u.role === "student").length);
+      
+      // Get all events to debug
+      const allEvents = await db.select().from(events);
+      console.log("All events in database:", allEvents.length);
+      
+      // Get all registrations to debug
+      const allRegistrations = await db.select().from(registrations);
+      console.log("All registrations in database:", allRegistrations.length);
+      
+      // Get all attendance to debug
+      const allAttendance = await db.select().from(attendance);
+      console.log("All attendance in database:", allAttendance.length);
+      
+      // Now do the count queries
+      const [studentsCount] = await db.select({ count: count() }).from(users).where(eq(users.role, "student"));
+      console.log("Students count query result:", studentsCount);
+      
+      const [eventsCount] = await db.select({ count: count() }).from(events);
+      console.log("Events count query result:", eventsCount);
+      
+      const [registrationsCount] = await db.select({ count: count() }).from(registrations);
+      console.log("Registrations count query result:", registrationsCount);
+      
+      const [attendanceCount] = await db.select({ count: count() }).from(attendance);
+      console.log("Attendance count query result:", attendanceCount);
 
-    return {
-      totalStudents: studentsCount?.count || 0,
-      totalEvents: eventsCount?.count || 0,
-      totalRegistrations: registrationsCount?.count || 0,
-      totalAttendance: attendanceCount?.count || 0,
-    };
+      const result = {
+        totalStudents: studentsCount?.count || 0,
+        totalEvents: eventsCount?.count || 0,
+        totalRegistrations: registrationsCount?.count || 0,
+        totalAttendance: attendanceCount?.count || 0,
+      };
+      
+      console.log("Final stats result:", result);
+      return result;
+    } catch (error) {
+      console.error("Error in getStats:", error);
+      throw error;
+    }
   }
 }
 

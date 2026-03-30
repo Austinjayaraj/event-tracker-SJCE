@@ -38,6 +38,7 @@ export const registrations = pgTable("registrations", {
   eventId: integer("event_id").references(() => events.id).notNull(),
   qrCode: text("qr_code").notNull().unique(),
   status: text("status").notNull().default("registered"), // 'registered', 'attended'
+  photoPath: text("photo_path"), // Path to uploaded student photo
   registeredAt: timestamp("registered_at").defaultNow().notNull(),
 });
 
@@ -132,12 +133,24 @@ export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
   createdBy: true,
+}).extend({
+  date: z.preprocess((arg) => {
+    if (typeof arg === "string" || arg instanceof Date) return new Date(arg);
+    return arg;
+  }, z.date()),
 });
 
 export const insertRegistrationSchema = createInsertSchema(registrations).omit({
   id: true,
+  userId: true,
   registeredAt: true,
   qrCode: true,
+  photoPath: true,
+});
+
+export const insertRegistrationBackendSchema = createInsertSchema(registrations).omit({
+  id: true,
+  registeredAt: true,
 });
 
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({

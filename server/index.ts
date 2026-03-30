@@ -1,8 +1,14 @@
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import * as schema from "@shared/schema";
+
 
 const app = express();
+// Remove the CORS import and usage for unified setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -43,8 +49,18 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
+    // Log the full error to the console for debugging
+    console.error("API Error (raw):", err);
+    if (err instanceof Error) {
+      console.error("API Error (stack):", err.stack);
+    } else {
+      try {
+        console.error("API Error (JSON):", JSON.stringify(err, null, 2));
+      } catch {}
+    }
+
     res.status(status).json({ message });
-    throw err;
+    // throw err; // Commented out to prevent server crash on handled errors
   });
 
   // importantly only setup vite in development and after
@@ -60,11 +76,16 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = 5000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  server.listen(port, "localhost", () => {
     log(`serving on port ${port}`);
   });
 })();
+
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    "DATABASE_URL must be set. Did you forget to provision a database?",
+  );
+}
+
+export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = drizzle(pool, { schema });

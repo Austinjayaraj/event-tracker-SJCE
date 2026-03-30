@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,12 +33,17 @@ import {
   Camera,
   Check
 } from "lucide-react";
+import { QrReader } from 'react-qr-reader';
+import { PhotoVerificationModal } from '@/components/photo-verification-modal';
 
-const eventFormSchema = insertEventSchema.extend({
-  date: z.string(),
-});
+// Remove the custom eventFormSchema and use insertEventSchema directly
+// const eventFormSchema = insertEventSchema.extend({
+//   date: z.preprocess((arg) => {
+//     if (typeof arg === "string" || arg instanceof Date) return new Date(arg);
+//   }, z.date()),
+// });
 
-type EventForm = z.infer<typeof eventFormSchema>;
+type EventForm = z.infer<typeof insertEventSchema>;
 
 export default function AdminDashboard() {
   const { user, logoutMutation } = useAuth();
@@ -46,10 +51,28 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedEvent, setSelectedEvent] = useState<number | null>(null);
   const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
+  
+  // Filter state variables
+  const [filterEvent, setFilterEvent] = useState<string>("all");
+  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterDepartment, setFilterDepartment] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("attendedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [filteredAttendance, setFilteredAttendance] = useState<any[]>([]);
 
   // Fetch dashboard stats
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats, isLoading: statsLoading, error: statsError } = useQuery({
     queryKey: ["/api/stats"],
+    refetchInterval: 5000, // Refetch every 5 seconds
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/stats");
+      const data = await res.json();
+      console.log("Fetched stats data:", data);
+      return data;
+    },
   });
 
   // Fetch events
@@ -62,12 +85,28 @@ export default function AdminDashboard() {
     queryKey: ["/api/users"],
   });
 
+  // Attendance fetching
+  const { data: attendance, isLoading: attendanceLoading } = useQuery({
+    queryKey: ["/api/attendance"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/attendance`);
+      const data = await res.json();
+      console.log("Fetched attendance data:", data);
+      return data;
+    },
+  });
+
+  // Fix stats type errors by providing default values and type guards
+  const safeStats = stats || {};
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safeUsers = Array.isArray(users) ? users : [];
+
   // Create event mutation
   const createEventMutation = useMutation({
     mutationFn: async (data: EventForm) => {
       const response = await apiRequest("POST", "/api/events", {
         ...data,
-        date: new Date(data.date).toISOString(),
+        date: data.date, // send as string
       });
       return response.json();
     },
@@ -84,7 +123,7 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message,
-        variant: "destructive",
+        //variant: "destructive",
       });
     },
   });
@@ -117,12 +156,18 @@ export default function AdminDashboard() {
       const response = await apiRequest("POST", "/api/scan-qr", { qrCode, eventId });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
-      toast({
-        title: "Success",
-        description: `Attendance marked for ${data.user.name}`,
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      // Invalidate attendance records
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+      
+      // Debug: Log the scan result
+      console.log("QR Scan result:", data);
+      
+      // Show photo verification modal
+      setScanResult(data);
+      setVerificationModalOpen(true);
     },
     onError: (error: Error) => {
       toast({
@@ -134,12 +179,12 @@ export default function AdminDashboard() {
   });
 
   const eventForm = useForm<EventForm>({
-    resolver: zodResolver(eventFormSchema),
+    resolver: zodResolver(insertEventSchema),
     defaultValues: {
       title: "",
       description: "",
-      eventType: "college",
-      date: "",
+      eventType: "",
+      date: undefined,
       startTime: "",
       endTime: "",
       venue: "",
@@ -157,59 +202,212 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleExportAttendance = async (eventId?: number) => {
+  const handleExportAttendance = async () => {
     try {
-      const url = eventId ? `/api/attendance/export?eventId=${eventId}` : "/api/attendance/export";
-      const response = await fetch(url, { credentials: "include" });
-      const blob = await response.blob();
+      // Export the currently filtered and sorted data
+      const exportData = filteredAttendance.map((record: any) => ({
+        Name: record.user?.name || record.userId,
+        StudentID: record.user?.studentId || '',
+        Department: record.user?.department || '',
+        Event: record.event?.title || record.eventId,
+        CheckInTime: record.attendedAt ? new Date(record.attendedAt).toLocaleString() : '',
+        Status: "Attended"
+      }));
+
+      // Create Excel workbook
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      
+      // Set column widths
+      const columnWidths = [
+        { wch: 20 }, // Name
+        { wch: 15 }, // StudentID
+        { wch: 15 }, // Department
+        { wch: 25 }, // Event
+        { wch: 20 }, // CheckInTime
+        { wch: 10 }  // Status
+      ];
+      worksheet['!cols'] = columnWidths;
+      
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+      
+      // Generate filename based on filters
+      let filename = "attendance";
+      if (filterEvent !== "all") {
+        const event = safeEvents.find((e: any) => e.id.toString() === filterEvent);
+        filename += `-${event?.title?.replace(/[^a-zA-Z0-9]/g, '_') || filterEvent}`;
+      }
+      if (filterDepartment !== "all") {
+        filename += `-${filterDepartment.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      }
+      if (filterDate) {
+        filename += `-${filterDate}`;
+      }
+      filename += `.xlsx`;
+      
+      // Download the file
+      const buffer = XLSX.write(workbook, { type: "array", bookType: "xlsx" });
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = "attendance.xlsx";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
       window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+      
+      toast({
+        title: "Success",
+        description: `Attendance data exported successfully (${exportData.length} records)`,
+      });
     } catch (error) {
+      console.error("Export error:", error);
       toast({
         title: "Error",
-        description: "Failed to export attendance",
+        description: "Failed to export attendance data",
         variant: "destructive",
       });
     }
   };
 
+  // Filter attendance function
+  const handleFilterAttendance = useCallback(() => {
+    if (!attendance) {
+      console.log("No attendance data available for filtering");
+      return;
+    }
+    
+    console.log("Filtering attendance with:", { filterEvent, filterDate, filterDepartment, sortBy, sortOrder, totalRecords: attendance.length });
+    
+    let filtered = [...attendance];
+    
+    // Filter by event
+    if (filterEvent !== "all") {
+      const beforeEventFilter = filtered.length;
+      filtered = filtered.filter((record: any) => 
+        record.eventId?.toString() === filterEvent || 
+        record.event?.id?.toString() === filterEvent
+      );
+      console.log(`Event filter: ${beforeEventFilter} -> ${filtered.length} records`);
+    }
+    
+    // Filter by date
+    if (filterDate) {
+      const beforeDateFilter = filtered.length;
+      const filterDateObj = new Date(filterDate);
+      filterDateObj.setHours(0, 0, 0, 0);
+      
+      filtered = filtered.filter((record: any) => {
+        if (!record.attendedAt) return false;
+        const recordDate = new Date(record.attendedAt);
+        recordDate.setHours(0, 0, 0, 0);
+        return recordDate.getTime() === filterDateObj.getTime();
+      });
+      console.log(`Date filter: ${beforeDateFilter} -> ${filtered.length} records`);
+    }
+    
+    // Filter by department
+    if (filterDepartment !== "all") {
+      const beforeDeptFilter = filtered.length;
+      filtered = filtered.filter((record: any) => 
+        record.user?.department === filterDepartment
+      );
+      console.log(`Department filter: ${beforeDeptFilter} -> ${filtered.length} records`);
+    }
+    
+    // Sort the filtered results
+    filtered.sort((a: any, b: any) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case "name":
+          aValue = a.user?.name || "";
+          bValue = b.user?.name || "";
+          break;
+        case "studentId":
+          aValue = a.user?.studentId || "";
+          bValue = b.user?.studentId || "";
+          break;
+        case "department":
+          aValue = a.user?.department || "";
+          bValue = b.user?.department || "";
+          break;
+        case "event":
+          aValue = a.event?.title || "";
+          bValue = b.event?.title || "";
+          break;
+        case "attendedAt":
+        default:
+          aValue = new Date(a.attendedAt || 0);
+          bValue = new Date(b.attendedAt || 0);
+          break;
+      }
+      
+      if (sortBy === "attendedAt") {
+        return sortOrder === "asc" ? aValue - bValue : bValue - aValue;
+      } else {
+        if (aValue < bValue) return sortOrder === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      }
+    });
+    
+    console.log(`Final filtered and sorted result: ${filtered.length} records`);
+    setFilteredAttendance(filtered);
+  }, [attendance, filterEvent, filterDate, filterDepartment, sortBy, sortOrder]);
+
+  // Apply filters when attendance data changes
+  React.useEffect(() => {
+    if (attendance) {
+      handleFilterAttendance();
+    }
+  }, [attendance, filterEvent, filterDate, filterDepartment, sortBy, sortOrder, handleFilterAttendance]);
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-xl border-b-2 border-blue-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
-              <div className="w-10 h-10 bg-college-blue rounded-full flex items-center justify-center mr-3">
-                <GraduationCap className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
-                <p className="text-sm text-gray-600">St. Joseph's College of Engineering</p>
+              <div className="flex items-center space-x-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center shadow-lg">
+                  <GraduationCap className="h-8 w-8 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">St. Joseph's College</h1>
+                  <p className="text-sm text-gray-600 font-medium">Admin Dashboard - Attendance Management</p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
+            
+            <div className="flex items-center space-x-6">
               <div className="relative">
-                <Button variant="ghost" size="sm">
-                  <Bell className="h-5 w-5 text-gray-400" />
+                <Button variant="ghost" size="sm" className="relative p-3 hover:bg-blue-50 rounded-full">
+                  <Bell className="h-6 w-6 text-gray-600" />
+                  <span className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-semibold">
+                    3
+                  </span>
                 </Button>
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  3
-                </span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-college-blue rounded-full flex items-center justify-center">
-                  <User className="text-white text-sm" />
+              
+              <div className="flex items-center space-x-3 bg-gray-50 rounded-xl px-4 py-2">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center">
+                  <User className="h-5 w-5 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-700">{user?.name}</span>
-                <Button variant="ghost" size="sm" onClick={() => logoutMutation.mutate()}>
-                  <ChevronDown className="h-4 w-4" />
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                  <p className="text-xs text-gray-600 font-medium">Admin • {user?.department}</p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => logoutMutation.mutate()}
+                  className="text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg px-3 py-2"
+                >
+                  Logout
                 </Button>
               </div>
             </div>
@@ -239,7 +437,7 @@ export default function AdminDashboard() {
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-600">Total Students</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {statsLoading ? "..." : stats?.totalStudents || 0}
+                        {statsLoading ? "..." : safeStats.totalStudents || 0}
                       </p>
                     </div>
                   </div>
@@ -254,7 +452,7 @@ export default function AdminDashboard() {
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-600">Total Events</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {statsLoading ? "..." : stats?.totalEvents || 0}
+                        {statsLoading ? "..." : safeStats.totalEvents || 0}
                       </p>
                     </div>
                   </div>
@@ -269,7 +467,7 @@ export default function AdminDashboard() {
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-600">Registrations</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {statsLoading ? "..." : stats?.totalRegistrations || 0}
+                        {statsLoading ? "..." : safeStats.totalRegistrations || 0}
                       </p>
                     </div>
                   </div>
@@ -284,7 +482,7 @@ export default function AdminDashboard() {
                     <div className="ml-4">
                       <p className="text-sm font-medium text-gray-600">Attendance</p>
                       <p className="text-2xl font-bold text-gray-900">
-                        {statsLoading ? "..." : stats?.totalAttendance || 0}
+                        {statsLoading ? "..." : safeStats.totalAttendance || 0}
                       </p>
                     </div>
                   </div>
@@ -303,7 +501,7 @@ export default function AdminDashboard() {
                     {eventsLoading ? (
                       <p>Loading events...</p>
                     ) : (
-                      events?.slice(0, 3).map((event: any) => (
+                      safeEvents.slice(0, 3).map((event: any) => (
                         <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                           <div className="flex items-center">
                             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -332,19 +530,20 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {["CSE", "ECE", "EEE", "MECH"].map((dept) => (
-                      <div key={dept} className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                            <span className="text-white text-xs font-bold">{dept}</span>
+                    {["CSE", "ECE", "EEE", "MECH", "CIVIL", "IT", "BIO TECH", "ADS", "AML", "CYBER", "EIE", "CHEM", "MBA", "ME"].map((dept) => {
+                      const count = safeUsers.filter((user: any) => user.role === "student" && user.department === dept).length;
+                      return (
+                        <div key={dept} className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                              <span className="text-white text-xs font-bold">{dept}</span>
+                            </div>
+                            <span className="ml-3 text-sm font-medium text-gray-900">{dept}</span>
                           </div>
-                          <span className="ml-3 text-sm font-medium text-gray-900">{dept}</span>
+                          <span className="text-sm font-bold text-gray-900">{count}</span>
                         </div>
-                        <span className="text-sm font-bold text-gray-900">
-                          {Math.floor(Math.random() * 500) + 100}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -375,6 +574,16 @@ export default function AdminDashboard() {
                       <SelectItem value="ECE">ECE</SelectItem>
                       <SelectItem value="EEE">EEE</SelectItem>
                       <SelectItem value="MECH">MECH</SelectItem>
+                      <SelectItem value="CIVIL">CIVIL</SelectItem>
+                      <SelectItem value="IT">IT</SelectItem>
+                      <SelectItem value="BIO TECH">BIO TECH</SelectItem>
+                      <SelectItem value="ADS">ADS</SelectItem>
+                      <SelectItem value="AML">AML</SelectItem>
+                      <SelectItem value="CYBER">CYBER</SelectItem>
+                      <SelectItem value="EIE">EIE</SelectItem>
+                      <SelectItem value="CHEM">CHEM</SelectItem>
+                      <SelectItem value="MBA">MBA</SelectItem>
+                      <SelectItem value="ME">ME</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" onClick={() => handleExportAttendance()}>
@@ -401,7 +610,7 @@ export default function AdminDashboard() {
                           <TableCell colSpan={7} className="text-center">Loading...</TableCell>
                         </TableRow>
                       ) : (
-                        users?.filter((user: any) => user.role === "student").map((user: any) => (
+                        safeUsers.filter((user: any) => user.role === "student").map((user: any) => (
                           <TableRow key={user.id}>
                             <TableCell>
                               <div className="flex items-center">
@@ -449,7 +658,7 @@ export default function AdminDashboard() {
                   <CardTitle>Event Management</CardTitle>
                   <Dialog open={createEventOpen} onOpenChange={setCreateEventOpen}>
                     <DialogTrigger asChild>
-                      <Button className="bg-college-blue hover:bg-college-dark">
+                      <Button className="bg-black hover:bg-college-dark">
                         <Plus className="w-4 h-4 mr-2" />
                         Create Event
                       </Button>
@@ -542,7 +751,7 @@ export default function AdminDashboard() {
                   {eventsLoading ? (
                     <div className="col-span-full text-center">Loading events...</div>
                   ) : (
-                    events?.map((event: any) => (
+                    safeEvents.map((event: any) => (
                       <Card key={event.id} className="hover:shadow-md transition-shadow">
                         <CardContent className="p-6">
                           <div className="flex items-center justify-between mb-4">
@@ -598,49 +807,134 @@ export default function AdminDashboard() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Attendance Records</CardTitle>
-                  <Button variant="outline" onClick={() => handleExportAttendance()}>
+                  <Button variant="outline" onClick={handleExportAttendance}>
                     <Download className="w-4 h-4 mr-2" />
                     Export to Excel
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="mb-4 flex space-x-4">
-                  <Select>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="All Events" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Events</SelectItem>
-                      {events?.map((event: any) => (
-                        <SelectItem key={event.id} value={event.id.toString()}>
-                          {event.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input type="date" className="w-48" />
-                  <Button className="bg-college-blue hover:bg-college-dark">
-                    Filter
-                  </Button>
+                <div className="mb-4 space-y-4">
+                  <div className="flex flex-wrap gap-4">
+                    <Select onValueChange={value => setFilterEvent(value)} value={filterEvent}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue placeholder="All Events" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Events</SelectItem>
+                        {safeEvents.map((event: any) => (
+                          <SelectItem key={event.id} value={event.id.toString()}>
+                            {event.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select onValueChange={value => setFilterDepartment(value)} value={filterDepartment}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue placeholder="All Departments" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {["CSE", "ECE", "EEE", "MECH", "CIVIL", "IT", "BIO TECH", "ADS", "AML", "CYBER", "EIE", "CHEM", "MBA", "ME"].map((dept) => (
+                          <SelectItem key={dept} value={dept}>
+                            {dept}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    <Input 
+                      type="date" 
+                      className="w-48" 
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-4">
+                    <Select onValueChange={value => setSortBy(value)} value={sortBy}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="attendedAt">Check-in Time</SelectItem>
+                        <SelectItem value="name">Student Name</SelectItem>
+                        <SelectItem value="studentId">Student ID</SelectItem>
+                        <SelectItem value="department">Department</SelectItem>
+                        <SelectItem value="event">Event</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <Select onValueChange={value => setSortOrder(value as "asc" | "desc")} value={sortOrder}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue placeholder="Order" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="asc">Ascending</SelectItem>
+                        <SelectItem value="desc">Descending</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    <Button 
+                      className="bg-black hover:bg-gray-900 text-white"
+                      onClick={handleFilterAttendance}
+                    >
+                      Apply Filters
+                    </Button>
+                    
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setFilterEvent("all");
+                        setFilterDate("");
+                        setFilterDepartment("all");
+                        setSortBy("attendedAt");
+                        setSortOrder("desc");
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
+                </div>
+                <div className="mb-4 text-sm text-gray-600">
+                  Showing {filteredAttendance.length} of {attendance?.length || 0} attendance records
                 </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Student</TableHead>
+                        <TableHead>Student Name</TableHead>
+                        <TableHead>Student ID</TableHead>
+                        <TableHead>Department</TableHead>
                         <TableHead>Event</TableHead>
                         <TableHead>Check-in Time</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>QR Code</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-gray-500">
-                          No attendance records found
-                        </TableCell>
-                      </TableRow>
+                      {attendanceLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center">Loading...</TableCell>
+                        </TableRow>
+                      ) : filteredAttendance && filteredAttendance.length > 0 ? (
+                        filteredAttendance.map((record: any) => (
+                          <TableRow key={record.id}>
+                            <TableCell>{record.user?.name || record.userId}</TableCell>
+                            <TableCell>{record.user?.studentId || ''}</TableCell>
+                            <TableCell>{record.user?.department || ''}</TableCell>
+                            <TableCell>{record.event?.title || record.eventId}</TableCell>
+                            <TableCell>{record.attendedAt ? new Date(record.attendedAt).toLocaleString() : ''}</TableCell>
+                            <TableCell>
+                              <span className="inline-block px-2 py-1 rounded bg-blue-500 text-white text-xs">Attended</span>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center">No attendance records found</TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -663,7 +957,7 @@ export default function AdminDashboard() {
                           <SelectValue placeholder="Select an event" />
                         </SelectTrigger>
                         <SelectContent>
-                          {events?.map((event: any) => (
+                          {safeEvents.map((event: any) => (
                             <SelectItem key={event.id} value={event.id.toString()}>
                               {event.title}
                             </SelectItem>
@@ -677,8 +971,9 @@ export default function AdminDashboard() {
                       </div>
                       <p className="text-gray-600 mb-4">Position QR code within the camera frame</p>
                       <Button
-                        className="bg-college-blue hover:bg-college-dark"
+                        className="bg-black hover:bg-college-dark"
                         disabled={!selectedEvent}
+                        onClick={() => setScannerOpen(true)}
                       >
                         <Camera className="w-4 h-4 mr-2" />
                         Start Scanner
@@ -708,6 +1003,50 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+      {/* QR Scanner Modal */}
+      {scannerOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-black"
+              onClick={() => setScannerOpen(false)}
+            >
+              ×
+            </button>
+            <h2 className="text-lg font-bold mb-4">Scan QR Code</h2>
+            <QrReader
+              onResult={(result, error) => {
+                if (!!result) {
+                  console.log('QR Scan result:', result.getText());
+                  qrScanMutation.mutate({ qrCode: result.getText(), eventId: selectedEvent! });
+                  setScannerOpen(false);
+                }
+                // Optionally handle errors
+                if (!!error) {
+                  // toast({ title: 'Error', description: error.message, variant: 'destructive' });
+                }
+              }}
+              constraints={{ facingMode: 'environment' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Photo Verification Modal */}
+      <PhotoVerificationModal
+        isOpen={verificationModalOpen}
+        onClose={() => {
+          setVerificationModalOpen(false);
+          setScanResult(null);
+        }}
+        scanResult={scanResult}
+        onConfirm={() => {
+          toast({
+            title: "Success",
+            description: `Attendance confirmed for ${scanResult?.user?.name}`,
+          });
+        }}
+      />
     </div>
   );
 }
