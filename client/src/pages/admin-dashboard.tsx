@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { QrReader } from 'react-qr-reader';
 import { PhotoVerificationModal } from '@/components/photo-verification-modal';
+import { ManageEventModal } from '@/components/manage-event-modal';
 
 // Remove the custom eventFormSchema and use insertEventSchema directly
 // const eventFormSchema = insertEventSchema.extend({
@@ -54,6 +55,7 @@ export default function AdminDashboard() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
+  const [selectedEventForManage, setSelectedEventForManage] = useState<any>(null);
   
   // Filter state variables
   const [filterEvent, setFilterEvent] = useState<string>("all");
@@ -189,6 +191,14 @@ export default function AdminDashboard() {
       endTime: "",
       venue: "",
       department: "",
+      preEventPosterPath: "",
+      preEventGuestDetails: "",
+      preEventAdditionalDetails: "",
+      postEventDetails: "",
+      postEventWinners: "",
+      postEventStudentsBenefited: 0,
+      postEventVideoPath: "",
+      postEventSpecialMoments: "",
     },
   });
 
@@ -759,8 +769,8 @@ export default function AdminDashboard() {
                               <Calendar className="text-blue-600" />
                             </div>
                             <div className="flex space-x-2">
-                              <Button size="sm" variant="ghost">
-                                <Edit className="w-4 h-4" />
+                              <Button size="sm" variant="outline" onClick={() => setSelectedEventForManage(event)}>
+                                Manage Works
                               </Button>
                               <Button
                                 size="sm"
@@ -800,6 +810,11 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+            <ManageEventModal 
+              event={selectedEventForManage} 
+              open={!!selectedEventForManage} 
+              onOpenChange={(open) => !open && setSelectedEventForManage(null)} 
+            />
           </TabsContent>
 
           <TabsContent value="attendance" className="space-y-6">
