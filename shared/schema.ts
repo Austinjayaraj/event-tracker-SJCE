@@ -27,6 +27,20 @@ export const events = pgTable("events", {
   endTime: text("end_time").notNull(),
   venue: text("venue").notNull(),
   department: text("department"), // null for college events
+  
+  // Pre Event Works Fields
+  preEventPosterPath: text("pre_event_poster_path"),
+  preEventGuestDetails: text("pre_event_guest_details"),
+  preEventAdditionalDetails: text("pre_event_additional_details"),
+  
+  // Post Event Works Fields
+  postEventDetails: text("post_event_details"),
+  postEventWinners: text("post_event_winners"),
+  postEventStudentsBenefited: integer("post_event_students_benefited"),
+  postEventPhotosPaths: jsonb("post_event_photos_paths"), // Store array of paths
+  postEventVideoPath: text("post_event_video_path"),
+  postEventSpecialMoments: text("post_event_special_moments"),
+  
   isActive: boolean("is_active").notNull().default(true),
   createdBy: integer("created_by").references(() => users.id).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

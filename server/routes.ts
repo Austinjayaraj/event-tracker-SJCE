@@ -217,6 +217,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Photo and files upload for events works
+  app.post("/api/events/:id/works/upload", requireAdmin, upload.any(), async (req, res) => {
+    try {
+      const eventId = parseInt(req.params.id);
+      const files = req.files as Express.Multer.File[];
+      
+      if (!files || files.length === 0) {
+        return res.status(400).json({ message: "No files uploaded" });
+      }
+      
+      const filePaths = files.map(f => f.filename);
+      res.json({ message: "Files uploaded successfully", filePaths });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to upload files" });
+    }
+  });
+
+
   // Photo upload for registration
   app.post("/api/registrations/upload-photo", requireAuth, photoUpload.single("photo"), async (req, res) => {
     try {
