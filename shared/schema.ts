@@ -14,6 +14,8 @@ export const users = pgTable("users", {
   section: text("section"),
   role: text("role").notNull().default("student"), // 'admin' or 'student'
   isActive: boolean("is_active").notNull().default(true),
+  isMentor: boolean("is_mentor").notNull().default(false), // auto-updated to true if winner
+  interests: jsonb("interests"), // stores JSON array of strings
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -27,6 +29,7 @@ export const events = pgTable("events", {
   endTime: text("end_time").notNull(),
   venue: text("venue").notNull(),
   department: text("department"), // null for college events
+  tags: jsonb("tags"), // Stores JSON array of string tags
   
   // Pre Event Works Fields
   preEventPosterPath: text("pre_event_poster_path"),
@@ -93,12 +96,23 @@ export const hackathonResults = pgTable("hackathon_results", {
   publishedAt: timestamp("published_at").defaultNow().notNull(),
 });
 
+export const mentorshipRequests = pgTable("mentorship_requests", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").references(() => users.id).notNull(),
+  menteeId: integer("mentee_id").references(() => users.id).notNull(),
+  status: text("status").notNull().default("pending"), // 'pending', 'accepted', 'declined'
+  message: text("message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   createdEvents: many(events),
   registrations: many(registrations),
   attendance: many(attendance),
   scannedAttendance: many(attendance),
+  mentees: many(mentorshipRequests, { relationName: "mentorship_mentor" }),
+  mentors: many(mentorshipRequests, { relationName: "mentorship_mentee" }),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
@@ -135,6 +149,11 @@ export const hackathonRoundsRelations = relations(hackathonRounds, ({ one, many 
 export const hackathonResultsRelations = relations(hackathonResults, ({ one }) => ({
   round: one(hackathonRounds, { fields: [hackathonResults.roundId], references: [hackathonRounds.id] }),
   registration: one(registrations, { fields: [hackathonResults.registrationId], references: [registrations.id] }),
+}));
+
+export const mentorshipRelations = relations(mentorshipRequests, ({ one }) => ({
+  mentor: one(users, { fields: [mentorshipRequests.mentorId], references: [users.id], relationName: "mentorship_mentor" }),
+  mentee: one(users, { fields: [mentorshipRequests.menteeId], references: [users.id], relationName: "mentorship_mentee" }),
 }));
 
 // Zod schemas
@@ -187,6 +206,11 @@ export const insertHackathonResultSchema = createInsertSchema(hackathonResults).
   publishedAt: true,
 });
 
+export const insertMentorshipSchema = createInsertSchema(mentorshipRequests).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -202,3 +226,5 @@ export type HackathonRound = typeof hackathonRounds.$inferSelect;
 export type InsertHackathonRound = z.infer<typeof insertHackathonRoundSchema>;
 export type HackathonResult = typeof hackathonResults.$inferSelect;
 export type InsertHackathonResult = z.infer<typeof insertHackathonResultSchema>;
+export type MentorshipRequest = typeof mentorshipRequests.$inferSelect;
+export type InsertMentorshipRequest = z.infer<typeof insertMentorshipSchema>;

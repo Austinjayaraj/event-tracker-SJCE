@@ -5,7 +5,8 @@ import {
   type Registration, type InsertRegistration, type Attendance, type InsertAttendance,
   type HackathonSubmission, type InsertHackathonSubmission,
   type HackathonRound, type InsertHackathonRound,
-  type HackathonResult, type InsertHackathonResult
+  type HackathonResult, type InsertHackathonResult,
+  mentorshipRequests, type MentorshipRequest, type InsertMentorshipRequest
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, count } from "drizzle-orm";
@@ -72,6 +73,12 @@ export interface IStorage {
     totalRegistrations: number;
     totalAttendance: number;
   }>;
+
+  // Advanced features
+  getEdaStats(): Promise<any>;
+  createMentorshipRequest(mentorship: Pick<InsertMentorshipRequest, "mentorId" | "menteeId" | "message">): Promise<MentorshipRequest>;
+  getMentors(): Promise<User[]>;
+  getRecommendations(userId: number): Promise<Event[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -283,6 +290,14 @@ export class DatabaseStorage implements IStorage {
 
   async createHackathonResult(result: InsertHackathonResult): Promise<HackathonResult> {
     const [newResult] = await db.insert(hackathonResults).values(result).returning();
+    
+    if (result.result === 'winner') {
+      const [reg] = await db.select().from(registrations).where(eq(registrations.id, result.registrationId));
+      if (reg) {
+        await this.updateUser(reg.userId, { isMentor: true });
+      }
+    }
+    
     return newResult;
   }
 
@@ -357,6 +372,56 @@ export class DatabaseStorage implements IStorage {
       console.error("Error in getStats:", error);
       throw error;
     }
+  }
+
+  // Advanced features implementation
+  async getEdaStats(): Promise<any> {
+    const usersAll = await db.select().from(users);
+    const eventsAll = await db.select().from(events);
+    const submissionsAll = await db.select().from(hackathonSubmissions);
+    
+    return {
+      totalSubmissions: submissionsAll.length,
+      registrationsByDepartment: usersAll.reduce((acc, user) => {
+        if(user.department) acc[user.department] = (acc[user.department] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      eventsByType: eventsAll.reduce((acc, event) => {
+        acc[event.eventType] = (acc[event.eventType] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      mentorsCount: usersAll.filter(u => u.isMentor).length
+    };
+  }
+
+  async createMentorshipRequest(mentorship: Pick<InsertMentorshipRequest, "mentorId" | "menteeId" | "message">): Promise<MentorshipRequest> {
+    const [newReq] = await db.insert(mentorshipRequests).values({
+      ...mentorship,
+      status: "pending"
+    } as any).returning();
+    return newReq;
+  }
+
+  async getMentors(): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.isMentor, true));
+  }
+
+  async getRecommendations(userId: number): Promise<Event[]> {
+    const allEvents = await this.getActiveEvents();
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    const userInterests = Array.isArray(user?.interests) ? user.interests : [];
+    
+    if (!userInterests || userInterests.length === 0) return allEvents;
+
+    return allEvents.sort((a, b) => {
+      const aTags = Array.isArray(a.tags) ? a.tags as string[] : [];
+      const bTags = Array.isArray(b.tags) ? b.tags as string[] : [];
+      
+      const aMatches = aTags.filter(tag => userInterests.includes(tag)).length;
+      const bMatches = bTags.filter(tag => userInterests.includes(tag)).length;
+      
+      return bMatches - aMatches;
+    });
   }
 }
 
