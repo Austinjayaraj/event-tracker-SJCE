@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
+import { EventReportTemplate } from "./event-report-template";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -9,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Event } from "@shared/schema";
-import { Upload, Image as ImageIcon, Video, Save } from "lucide-react";
+import { Upload, Image as ImageIcon, Video, Save, Download } from "lucide-react";
 
 interface ManageEventModalProps {
   event: Event | null;
@@ -22,6 +25,8 @@ export function ManageEventModal({ event, open, onOpenChange }: ManageEventModal
   const [activeTab, setActiveTab] = useState("overview");
   const [formData, setFormData] = useState<Partial<Event>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const prePdfRef = useRef<HTMLDivElement>(null);
+  const postPdfRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (event) {
@@ -80,6 +85,41 @@ export function ManageEventModal({ event, open, onOpenChange }: ManageEventModal
     updateEventMutation.mutate(formData);
   };
 
+  const downloadPdf = async (type: "pre" | "post") => {
+    const element = type === "pre" ? prePdfRef.current : postPdfRef.current;
+    if (!element) return;
+    
+    setIsUploading(true);
+    toast({ title: "Generating PDF", description: "Please wait..." });
+
+    try {
+      const canvas = await html2canvas(element, { 
+        scale: 2,
+        useCORS: true, 
+        logging: false 
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "a4"
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${event!.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${type}_event_report.pdf`);
+      
+      toast({ title: "Success", description: "PDF downloaded successfully" });
+    } catch (err: any) {
+      toast({ title: "Error", description: "Failed to generate PDF", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   if (!event) return null;
 
   return (
@@ -117,6 +157,14 @@ export function ManageEventModal({ event, open, onOpenChange }: ManageEventModal
           </TabsContent>
 
           <TabsContent value="preevent" className="space-y-4 mt-4">
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h3 className="font-semibold text-lg">Pre-Event Details</h3>
+              <Button onClick={() => downloadPdf("pre")} variant="secondary" size="sm" disabled={isUploading}>
+                <Download className="w-4 h-4 mr-2" />
+                Download Report (PDF)
+              </Button>
+            </div>
+            
             <div className="space-y-2">
               <Label>Event Poster</Label>
               <div className="flex items-center gap-4">
@@ -145,6 +193,14 @@ export function ManageEventModal({ event, open, onOpenChange }: ManageEventModal
           </TabsContent>
 
           <TabsContent value="postevent" className="space-y-4 mt-4">
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h3 className="font-semibold text-lg">Post-Event Details Analysis</h3>
+              <Button onClick={() => downloadPdf("post")} variant="secondary" size="sm" disabled={isUploading}>
+                <Download className="w-4 h-4 mr-2" />
+                Download Report (PDF)
+              </Button>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Event Details/Summary</Label>
@@ -215,6 +271,16 @@ export function ManageEventModal({ event, open, onOpenChange }: ManageEventModal
           <Button onClick={handleSave} disabled={updateEventMutation.isPending || isUploading}>
             {updateEventMutation.isPending ? "Saving..." : <><Save className="w-4 h-4 mr-2"/> Save Changes</>}
           </Button>
+        </div>
+        
+        {/* Hidden Templates for PDF Generation */}
+        <div style={{ position: "absolute", left: "-9999px", top: "-9999px" }}>
+          {formData.id && (
+             <>
+               <EventReportTemplate ref={prePdfRef} event={formData as Event} type="pre" />
+               <EventReportTemplate ref={postPdfRef} event={formData as Event} type="post" />
+             </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

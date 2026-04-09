@@ -777,6 +777,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // EDA Analytics
+  app.get("/api/eda/stats", requireAdmin, async (req, res) => {
+    try {
+      const stats = await storage.getEdaStats();
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch EDA stats" });
+    }
+  });
+
+  // Mentorship API
+  app.post("/api/mentorships/request", requireAuth, async (req, res) => {
+    try {
+      const reqData = req.body;
+      const request = await storage.createMentorshipRequest({
+        mentorId: reqData.mentorId,
+        menteeId: req.user!.id,
+        message: reqData.message,
+      });
+      res.status(201).json(request);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create mentorship request" });
+    }
+  });
+
+  app.get("/api/mentors", requireAuth, async (req, res) => {
+    try {
+      const mentors = await storage.getMentors();
+      res.json(mentors);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch mentors" });
+    }
+  });
+
+  // Recommendations API
+  app.get("/api/recommendations", requireAuth, async (req, res) => {
+    try {
+      const recommendations = await storage.getRecommendations(req.user!.id);
+      res.json(recommendations);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch recommendations" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

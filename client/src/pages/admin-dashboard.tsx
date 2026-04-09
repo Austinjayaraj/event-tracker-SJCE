@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +32,10 @@ import {
   ChevronDown,
   User,
   Camera,
-  Check
+  Check,
+  PieChart,
+  TrendingUp,
+  Activity
 } from "lucide-react";
 import { QrReader } from 'react-qr-reader';
 import { PhotoVerificationModal } from '@/components/photo-verification-modal';
@@ -96,6 +100,11 @@ export default function AdminDashboard() {
       console.log("Fetched attendance data:", data);
       return data;
     },
+  });
+
+  // Fetch EDA stats
+  const { data: edaStats, isLoading: edaLoading } = useQuery({
+    queryKey: ["/api/eda/stats"],
   });
 
   // Fix stats type errors by providing default values and type guards
@@ -376,21 +385,26 @@ export default function AdminDashboard() {
   }, [attendance, filterEvent, filterDate, filterDepartment, sortBy, sortOrder, handleFilterAttendance]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-transparent text-gray-200 pb-12 relative overflow-hidden font-sans">
+      <div className="relative z-10 flex flex-col h-full">
       {/* Header */}
-      <header className="bg-white shadow-xl border-b-2 border-blue-200">
+      <header className="bg-[#0A0B0E]/80 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.8)] border-b border-white/5 sticky top-0 z-40 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center">
-              <div className="flex items-center space-x-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl flex items-center justify-center shadow-lg">
+              <motion.div 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center space-x-4"
+              >
+                <div className="w-14 h-14 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg ring-2 ring-primary/20">
                   <GraduationCap className="h-8 w-8 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">St. Joseph's College</h1>
-                  <p className="text-sm text-gray-600 font-medium">Admin Dashboard - Attendance Management</p>
+                  <h1 className="text-2xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">St. Joseph's College</h1>
+                  <p className="text-sm text-gray-600 font-medium tracking-wide">Admin Dashboard</p>
                 </div>
-              </div>
+              </motion.div>
             </div>
             
             <div className="flex items-center space-x-6">
@@ -403,19 +417,19 @@ export default function AdminDashboard() {
                 </Button>
               </div>
               
-              <div className="flex items-center space-x-3 bg-gray-50 rounded-xl px-4 py-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-800 rounded-full flex items-center justify-center">
+              <div className="flex items-center space-x-3 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 hover:bg-white/10 transition-colors">
+                <div className="w-10 h-10 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-full flex items-center justify-center shadow-lg">
                   <User className="h-5 w-5 text-white" />
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-                  <p className="text-xs text-gray-600 font-medium">Admin • {user?.department}</p>
+                  <p className="text-sm font-semibold text-white">{user?.name}</p>
+                  <p className="text-xs text-teal-300 font-medium">Admin • {user?.department}</p>
                 </div>
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={() => logoutMutation.mutate()}
-                  className="text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg px-3 py-2"
+                  className="text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl px-3 py-2 ml-2 transition-colors"
                 >
                   Logout
                 </Button>
@@ -425,73 +439,78 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+      >
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="students">Students</TabsTrigger>
-            <TabsTrigger value="events">Events</TabsTrigger>
-            <TabsTrigger value="attendance">Attendance</TabsTrigger>
-            <TabsTrigger value="qr-scan">QR Scan</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-6 bg-[#0A0B0E]/80 rounded-full mb-8 p-1 border border-white/5 shadow-inner overflow-x-auto">
+            <TabsTrigger className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/90 data-[state=active]:to-purple-500/90 data-[state=active]:text-white data-[state=inactive]:text-gray-400 transition-all font-medium py-2.5" value="overview">Overview</TabsTrigger>
+            <TabsTrigger className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/90 data-[state=active]:to-purple-500/90 data-[state=active]:text-white data-[state=inactive]:text-gray-400 transition-all font-medium py-2.5" value="students">Students</TabsTrigger>
+            <TabsTrigger className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/90 data-[state=active]:to-purple-500/90 data-[state=active]:text-white data-[state=inactive]:text-gray-400 transition-all font-medium py-2.5" value="events">Events</TabsTrigger>
+            <TabsTrigger className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/90 data-[state=active]:to-purple-500/90 data-[state=active]:text-white data-[state=inactive]:text-gray-400 transition-all font-medium py-2.5" value="attendance">Attendance</TabsTrigger>
+            <TabsTrigger className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/90 data-[state=active]:to-purple-500/90 data-[state=active]:text-white data-[state=inactive]:text-gray-400 transition-all font-medium py-2.5" value="qr-scan">QR Scan</TabsTrigger>
+            <TabsTrigger className="rounded-full data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-400/90 data-[state=active]:to-purple-500/90 data-[state=active]:text-white data-[state=inactive]:text-gray-400 transition-all font-medium py-2.5" value="eda">EDA Insights</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
+              <Card className="glass border-0 hover:-translate-y-1 transition-transform duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-blue-100 rounded-lg">
-                      <Users className="text-blue-600 h-6 w-6" />
+                    <div className="p-3 bg-primary/10 rounded-xl">
+                      <Users className="text-primary h-6 w-6" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Students</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500">Total Students</p>
+                      <p className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
                         {statsLoading ? "..." : safeStats.totalStudents || 0}
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="glass border-0 hover:-translate-y-1 transition-transform duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-green-100 rounded-lg">
-                      <Calendar className="text-green-600 h-6 w-6" />
+                    <div className="p-3 bg-secondary/10 rounded-xl">
+                      <Calendar className="text-secondary h-6 w-6" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Events</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500">Total Events</p>
+                      <p className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
                         {statsLoading ? "..." : safeStats.totalEvents || 0}
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="glass border-0 hover:-translate-y-1 transition-transform duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-yellow-100 rounded-lg">
+                    <div className="p-3 bg-yellow-500/10 rounded-xl">
                       <QrCode className="text-yellow-600 h-6 w-6" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Registrations</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500">Registrations</p>
+                      <p className="text-3xl font-bold text-gray-800">
                         {statsLoading ? "..." : safeStats.totalRegistrations || 0}
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-              <Card>
+              <Card className="glass border-0 hover:-translate-y-1 transition-transform duration-300">
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-purple-100 rounded-lg">
-                      <Trophy className="text-purple-600 h-6 w-6" />
+                    <div className="p-3 bg-green-500/10 rounded-xl">
+                      <Trophy className="text-green-600 h-6 w-6" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Attendance</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-gray-500">Attendance</p>
+                      <p className="text-3xl font-bold text-gray-800">
                         {statsLoading ? "..." : safeStats.totalAttendance || 0}
                       </p>
                     </div>
@@ -502,32 +521,38 @@ export default function AdminDashboard() {
 
             {/* Recent Events */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="glass border-0">
                 <CardHeader>
-                  <CardTitle>Recent Events</CardTitle>
+                  <CardTitle className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary inline-block">Recent Events</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     {eventsLoading ? (
                       <p>Loading events...</p>
                     ) : (
-                      safeEvents.slice(0, 3).map((event: any) => (
-                        <div key={event.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      safeEvents.slice(0, 3).map((event: any, i: number) => (
+                        <motion.div 
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.1 }}
+                          key={event.id} 
+                          className="flex items-center justify-between p-4 bg-white/50 backdrop-blur-sm rounded-xl hover:bg-white/80 transition-colors shadow-sm"
+                        >
                           <div className="flex items-center">
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                              <Calendar className="text-blue-600" />
+                            <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                              <Calendar className="text-primary" />
                             </div>
                             <div className="ml-4">
-                              <p className="font-medium text-gray-900">{event.title}</p>
-                              <p className="text-sm text-gray-600">
+                              <p className="font-bold text-gray-900">{event.title}</p>
+                              <p className="text-sm text-gray-500 font-medium">
                                 {new Date(event.date).toLocaleDateString()} • {event.venue}
                               </p>
                             </div>
                           </div>
-                          <Badge variant={event.isActive ? "default" : "secondary"}>
+                          <Badge variant={event.isActive ? "default" : "secondary"} className={event.isActive ? "bg-primary text-white" : ""}>
                             {event.isActive ? "Active" : "Inactive"}
                           </Badge>
-                        </div>
+                        </motion.div>
                       ))
                     )}
                   </div>
@@ -565,7 +590,7 @@ export default function AdminDashboard() {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Student Management</CardTitle>
-                  <Button className="bg-college-blue hover:bg-college-dark">
+                  <Button className="bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 shadow-md transition-opacity">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Student
                   </Button>
@@ -573,9 +598,9 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="mb-4 flex space-x-4">
-                  <Input placeholder="Search students..." className="flex-1" />
+                  <Input placeholder="Search students..." className="flex-1 bg-white/50 backdrop-blur-sm focus:bg-white transition-colors" />
                   <Select>
-                    <SelectTrigger className="w-48">
+                    <SelectTrigger className="w-48 bg-white/50 backdrop-blur-sm">
                       <SelectValue placeholder="All Departments" />
                     </SelectTrigger>
                     <SelectContent>
@@ -596,7 +621,7 @@ export default function AdminDashboard() {
                       <SelectItem value="ME">ME</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button variant="outline" onClick={() => handleExportAttendance()}>
+                  <Button variant="outline" className="bg-white/50 hover:bg-white" onClick={() => handleExportAttendance()}>
                     <Download className="w-4 h-4 mr-2" />
                     Export
                   </Button>
@@ -662,154 +687,121 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="events" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Event Management</CardTitle>
-                  <Dialog open={createEventOpen} onOpenChange={setCreateEventOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="bg-black hover:bg-college-dark">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Event
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Create New Event</DialogTitle>
-                      </DialogHeader>
-                      <form onSubmit={eventForm.handleSubmit(handleCreateEvent)} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="title">Title</Label>
-                          <Input
-                            id="title"
-                            {...eventForm.register("title")}
-                            placeholder="Event title"
-                          />
+            <div className="flex justify-between items-center bg-white/50 backdrop-blur-md p-6 rounded-2xl shadow-sm border border-white/20">
+              <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">Event Management</h2>
+              <Dialog open={createEventOpen} onOpenChange={setCreateEventOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-primary to-secondary text-white hover:opacity-90 shadow-lg">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New Event</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={eventForm.handleSubmit(handleCreateEvent)} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="title">Event Title</Label>
+                      <Input id="title" {...eventForm.register("title")} placeholder="Enter event title" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea id="description" {...eventForm.register("description")} placeholder="Event description" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="date">Date</Label>
+                        <Input id="date" type="date" {...eventForm.register("date")} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="venue">Venue</Label>
+                        <Input id="venue" {...eventForm.register("venue")} placeholder="Event venue" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="startTime">Start Time</Label>
+                        <Input id="startTime" type="time" {...eventForm.register("startTime")} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="endTime">End Time</Label>
+                        <Input id="endTime" type="time" {...eventForm.register("endTime")} />
+                      </div>
+                    </div>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-primary to-secondary text-white shadow-md hover:opacity-90">
+                      Create Event
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+              {eventsLoading ? (
+                <p>Loading events...</p>
+              ) : safeEvents.length === 0 ? (
+                <p className="col-span-full text-center text-gray-500 py-12">No events found. Start by creating one!</p>
+              ) : (
+                safeEvents.map((event: any, i: number) => (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.05 }}
+                    key={event.id}
+                  >
+                    <Card className="glass h-full flex flex-col hover:-translate-y-2 transition-transform duration-300 relative border-0 shadow-lg">
+                      <div className={`h-2 w-full absolute top-0 left-0 ${event.isActive ? 'bg-gradient-to-r from-green-400 to-green-500' : 'bg-gradient-to-r from-gray-300 to-gray-400'}`} />
+                      
+                      <CardHeader className="pb-2 pt-6">
+                        <div className="flex justify-between items-start">
+                          <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center shadow-sm">
+                            <Calendar className="text-primary w-6 h-6" />
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button size="sm" variant="outline" className="bg-white/50 hover:bg-white" onClick={() => setSelectedEventForManage(event)}>
+                              Manage Works
+                            </Button>
+                            <Button size="sm" variant="ghost" className="hover:bg-red-50 hover:text-red-500 rounded-lg" onClick={() => handleDeleteEvent(event.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="description">Description</Label>
-                          <Textarea
-                            id="description"
-                            {...eventForm.register("description")}
-                            placeholder="Event description"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="eventType">Event Type</Label>
-                          <Select onValueChange={(value) => eventForm.setValue("eventType", value)}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select event type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="college">College Event</SelectItem>
-                              <SelectItem value="department">Department Event</SelectItem>
-                              <SelectItem value="hackathon">Hackathon</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="date">Date</Label>
-                            <Input
-                              id="date"
-                              type="date"
-                              {...eventForm.register("date")}
-                            />
+                        <CardTitle className="mt-4 text-xl font-bold text-gray-900">{event.title}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex-1 flex flex-col justify-between">
+                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">{event.description || "No description provided."}</p>
+                        
+                        <div className="space-y-3 pt-4 border-t border-gray-100">
+                          <div className="flex items-center text-sm font-medium text-gray-700">
+                            <Calendar className="w-4 h-4 mr-2 text-primary" />
+                            {new Date(event.date).toLocaleDateString()}
                           </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="venue">Venue</Label>
-                            <Input
-                              id="venue"
-                              {...eventForm.register("venue")}
-                              placeholder="Event venue"
-                            />
+                          <div className="flex items-center text-sm font-medium text-gray-700">
+                            <div className="w-4 h-4 mr-2 text-secondary flex items-center justify-center font-bold text-lg">🕔</div>
+                            {event.startTime} - {event.endTime}
+                          </div>
+                          <div className="flex items-center text-sm font-medium text-gray-700">
+                            <div className="w-4 h-4 mr-2 text-green-500 flex items-center justify-center font-bold text-lg">📍</div>
+                            {event.venue}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="startTime">Start Time</Label>
-                            <Input
-                              id="startTime"
-                              type="time"
-                              {...eventForm.register("startTime")}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="endTime">End Time</Label>
-                            <Input
-                              id="endTime"
-                              type="time"
-                              {...eventForm.register("endTime")}
-                            />
-                          </div>
+                        
+                        <div className="mt-6 flex justify-between items-center bg-gray-50/50 p-2 rounded-lg">
+                           <Badge variant={event.isActive ? "default" : "secondary"} className={event.isActive ? "bg-green-100 text-green-800 border-0" : "bg-gray-100 text-gray-600 border-0"}>
+                             {event.isActive ? "Active" : "Inactive"}
+                           </Badge>
+                           <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+                             {event.eventType || "General"}
+                           </Badge>
                         </div>
-                        <div className="flex justify-end space-x-2">
-                          <Button type="button" variant="outline" onClick={() => setCreateEventOpen(false)}>
-                            Cancel
-                          </Button>
-                          <Button type="submit" disabled={createEventMutation.isPending}>
-                            {createEventMutation.isPending ? "Creating..." : "Create Event"}
-                          </Button>
-                        </div>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {eventsLoading ? (
-                    <div className="col-span-full text-center">Loading events...</div>
-                  ) : (
-                    safeEvents.map((event: any) => (
-                      <Card key={event.id} className="hover:shadow-md transition-shadow">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                              <Calendar className="text-blue-600" />
-                            </div>
-                            <div className="flex space-x-2">
-                              <Button size="sm" variant="outline" onClick={() => setSelectedEventForManage(event)}>
-                                Manage Works
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDeleteEvent(event.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <h4 className="text-lg font-semibold text-gray-900 mb-2">{event.title}</h4>
-                          <p className="text-sm text-gray-600 mb-4">{event.description}</p>
-                          <div className="space-y-2 text-sm text-gray-600">
-                            <div className="flex items-center">
-                              <Calendar className="w-4 h-4 mr-2" />
-                              <span>{new Date(event.date).toLocaleDateString()}</span>
-                            </div>
-                            <div className="flex items-center">
-                              <span className="w-4 h-4 mr-2">🕐</span>
-                              <span>{event.startTime} - {event.endTime}</span>
-                            </div>
-                            <div className="flex items-center">
-                              <span className="w-4 h-4 mr-2">📍</span>
-                              <span>{event.venue}</span>
-                            </div>
-                          </div>
-                          <div className="mt-4 flex items-center justify-between">
-                            <Badge variant={event.isActive ? "default" : "secondary"}>
-                              {event.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                            <Badge variant="outline">{event.eventType}</Badge>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))
+              )}
+            </div>
+            
             <ManageEventModal 
               event={selectedEventForManage} 
               open={!!selectedEventForManage} 
@@ -1016,7 +1008,54 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="eda" className="space-y-6">
+            <Card className="glass border border-teal-500/20 shadow-[0_0_30px_rgba(45,212,191,0.1)] relative overflow-hidden bg-[#0B0C10]/90 rounded-[30px]">
+              <CardHeader className="relative z-10 border-b border-white/5 pb-6">
+                <CardTitle className="text-2xl font-bold font-sans flex items-center text-white">
+                  <Activity className="h-6 w-6 text-teal-400 mr-3" />
+                  EDA & Platform Insights
+                </CardTitle>
+                <p className="text-gray-400 mt-2 font-medium">Advanced analytical data extraction mirroring Unstop capabilities.</p>
+              </CardHeader>
+              <CardContent className="pt-8">
+                {edaLoading ? (
+                  <div className="text-teal-400 text-center py-10">Compiling dataset...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     <Card className="glass flex flex-col p-6 rounded-2xl bg-[#11131A] border-white/5 shadow-lg">
+                        <div className="flex items-center text-teal-400 mb-4 font-bold text-lg"><TrendingUp className="mr-2" /> Participation</div>
+                        <div className="text-4xl font-extrabold text-white">{edaStats?.totalSubmissions || 0}</div>
+                        <p className="text-gray-400 text-sm mt-2">Total hackathon submissions recorded.</p>
+                     </Card>
+                     
+                     <Card className="glass flex flex-col p-6 rounded-2xl bg-[#11131A] border-white/5 shadow-lg">
+                        <div className="flex items-center text-cyan-400 mb-4 font-bold text-lg"><PieChart className="mr-2" /> Top Departments</div>
+                        <ul className="space-y-2 mt-2">
+                           {Object.entries(edaStats?.registrationsByDepartment || {})
+                             .sort(([,a], [,b]) => (b as number) - (a as number))
+                             .slice(0, 3)
+                             .map(([dept, count]: any) => (
+                               <li key={dept} className="flex justify-between items-center text-gray-300">
+                                 <span>{dept}</span>
+                                 <Badge className="bg-cyan-500/20 text-cyan-400 border-none">{count} Uses</Badge>
+                               </li>
+                             ))}
+                        </ul>
+                     </Card>
+
+                     <Card className="glass flex flex-col p-6 rounded-2xl bg-[#11131A] border-white/5 shadow-lg">
+                        <div className="flex items-center text-purple-400 mb-4 font-bold text-lg"><Users className="mr-2" /> Mentorship Network</div>
+                        <div className="text-4xl font-extrabold text-white">{edaStats?.mentorsCount || 0}</div>
+                        <p className="text-gray-400 text-sm mt-2">Hackathon winners converted to mentors.</p>
+                     </Card>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+      </motion.div>
       </div>
       {/* QR Scanner Modal */}
       {scannerOpen && (

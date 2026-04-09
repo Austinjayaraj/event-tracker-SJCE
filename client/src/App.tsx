@@ -9,6 +9,7 @@ import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import AdminDashboard from "@/pages/admin-dashboard";
 import StudentDashboard from "@/pages/student-dashboard";
+import { AnimatedBackground } from "@/components/animated-background";
 import { Redirect } from "wouter";
 
 function HomeRedirect() {
@@ -38,6 +39,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
+          <AnimatedBackground />
           <Toaster />
           <Router />
         </TooltipProvider>
