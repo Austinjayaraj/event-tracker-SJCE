@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { QRCodeModal } from "@/components/qr-code-modal";
 import { FileUploadModal } from "@/components/file-upload-modal";
 import { PhotoUploadModal } from "@/components/photo-upload-modal";
+import { Chatbot } from "@/components/chatbot";
 import { 
   GraduationCap, 
   Calendar, 
@@ -37,20 +38,24 @@ export default function StudentDashboard() {
   const [selectedRegistration, setSelectedRegistration] = useState<any>(null);
 
   // Fetch available events
-  const { data: events, isLoading: eventsLoading } = useQuery({
+  const { data: events, isLoading: eventsLoading } = useQuery<any[]>({
     queryKey: ["/api/events"],
   });
 
   // Fetch user registrations
-  const { data: registrations, isLoading: registrationsLoading } = useQuery({
+  const { data: registrations, isLoading: registrationsLoading } = useQuery<any[]>({
     queryKey: ["/api/registrations"],
   });
 
-  const { data: recommendations, isLoading: recoLoading } = useQuery({
+  const { data: recommendations, isLoading: recoLoading } = useQuery<any[]>({
     queryKey: ["/api/recommendations"],
   });
 
-  const { data: mentors, isLoading: mentorsLoading } = useQuery({
+  const { data: externalHackathons, isLoading: externalLoading } = useQuery<any[]>({
+    queryKey: ["/api/unstop-hackathons"],
+  });
+
+  const { data: mentors, isLoading: mentorsLoading } = useQuery<any[]>({
     queryKey: ["/api/mentors"],
   });
 
@@ -255,14 +260,16 @@ export default function StudentDashboard() {
             </CardHeader>
             <CardContent className="relative z-10 pt-8">
               <div className="flex overflow-x-auto space-x-6 pb-4 scrollbar-hide">
-                {recoLoading ? (
+                {recoLoading || externalLoading ? (
                   <div className="text-cyan-400">Finding best events...</div>
-                ) : recommendations?.length === 0 ? (
+                ) : (!recommendations?.length && !externalHackathons?.length) ? (
                   <div className="text-gray-500">No specific recommendations right now. Check all events below!</div>
                 ) : (
-                  recommendations?.slice(0, 4).map((event: any, i: number) => {
-                    const registration = getRegistrationStatus(event.id);
-                    if (registration) return null; // Don't recommend already registered
+                  [...(recommendations || []), ...(externalHackathons || [])].slice(0, 8).map((event: any, i: number) => {
+                    if (!event.isExternal) {
+                      const registration = getRegistrationStatus(event.id);
+                      if (registration) return null; // Don't recommend already registered internal events
+                    }
                     return (
                       <motion.div 
                         key={"reco_uid_"+event.id}
@@ -271,18 +278,29 @@ export default function StudentDashboard() {
                         transition={{ delay: i * 0.1 }}
                         className="min-w-[300px] max-w-[320px] flex-shrink-0"
                       >
-                        <Card className="glass h-full hover:-translate-y-2 transition-all duration-300 border border-cyan-500/20 shadow-[0_4px_15px_rgba(56,189,248,0.1)] bg-[#0A0B0E]/80 rounded-2xl overflow-hidden">
-                           <CardContent className="p-5 flex flex-col h-full">
-                              <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 w-fit mb-3">Suggested match</Badge>
+                        <Card className="glass h-full hover:-translate-y-2 transition-all duration-300 border border-cyan-500/20 shadow-[0_4px_15px_rgba(56,189,248,0.1)] bg-[#0A0B0E]/80 rounded-2xl overflow-hidden relative">
+                           {event.isExternal && (
+                             <div className="absolute top-0 right-0 bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg z-10">Unstop</div>
+                           )}
+                           <CardContent className="p-5 flex flex-col h-full mt-2">
+                              <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 w-fit mb-3">
+                                {event.isExternal ? "External Hackathon" : "Suggested match"}
+                              </Badge>
                               <h4 className="text-lg font-bold text-white mb-2 line-clamp-1">{event.title}</h4>
                               <p className="text-xs text-gray-400 mb-4 line-clamp-2">{event.description}</p>
                               <Button
                                 size="sm"
                                 className="mt-auto w-full bg-gradient-to-r from-cyan-500 to-teal-500 text-white font-semibold rounded-lg"
-                                onClick={() => handleRegister(event.id)}
-                                disabled={registerMutation.isPending}
+                                onClick={() => {
+                                  if (event.isExternal) {
+                                    window.open(event.publicUrl, "_blank");
+                                  } else {
+                                    handleRegister(event.id);
+                                  }
+                                }}
+                                disabled={!event.isExternal && registerMutation.isPending}
                               >
-                                {registerMutation.isPending ? "Joining..." : "Register Now"}
+                                {(!event.isExternal && registerMutation.isPending) ? "Joining..." : (event.isExternal ? "View on Unstop" : "Register Now")}
                               </Button>
                            </CardContent>
                         </Card>
@@ -569,6 +587,7 @@ export default function StudentDashboard() {
           queryClient.invalidateQueries({ queryKey: ["/api/registrations"] });
         }}
       />
+      <Chatbot />
     </div>
   );
 }

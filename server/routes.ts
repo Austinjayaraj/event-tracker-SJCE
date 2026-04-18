@@ -821,6 +821,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Unstop external hackathons API
+  app.get("/api/unstop-hackathons", requireAuth, async (req, res) => {
+    try {
+      const response = await fetch("https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&page=1&per_page=5", {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+          "Accept": "application/json"
+        }
+      });
+      if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+      const data = await response.json();
+      
+      const externalEvents = (data?.data?.data || []).map((ev: any) => ({
+        id: `unstop-${ev.id}`,
+        title: ev.title,
+        description: ev.seo_details?.seo_description || ev.short_description || ev.title,
+        isExternal: true,
+        publicUrl: ev.public_url,
+        eventType: "hackathon",
+        date: ev.end_date,
+        tags: ["external", "hackathon"]
+      }));
+      console.log(`Unstop Hackathons fetched: ${externalEvents.length}`);
+      res.json(externalEvents);
+    } catch (error) {
+      console.error("Failed to fetch Unstop hackathons:", error);
+      res.status(500).json({ message: "Failed to fetch external hackathons" });
+    }
+  });
+
+  // Chatbot API using Groq
+  app.post("/api/chat", requireAuth, async (req, res) => {
+    try {
+      const { messages } = req.body;
+      const apiKey = process.env.GROQ_API_KEY;
+      
+      if (!apiKey) {
+        return res.status(500).json({ message: "GROQ_API_KEY is not configured" });
+      }
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama3-8b-8192", // High speed model suitable for general chat
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful AI Student Event assistant for a college hackathon platform. You help students discover events, write project ideas, or navigate the application."
+            },
+            ...messages
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API error: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Chat API error:", error);
+      res.status(500).json({ message: "Failed to process chat request" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
